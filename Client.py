@@ -344,6 +344,22 @@ def game():
         gui.deiconify()
     connectButton.config(command=lambda: connect(client_socket, connected, name.get(), ip.get(), port.get()))
 
+    tempSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, True)
+    tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
+    tempSock.settimeout(1)
+
+    tempSock.sendto("battleships?", ("255.255.255.255", 1234))
+    try:
+        data = tempSock.recvfrom(1024)
+        if data[0] == "indeed":
+            ipEntry.foc_in()
+            ip.set(data[1][0])
+            portEntry.foc_in()
+            port.set(12345)
+            gui.lift()
+    except:
+        pass
 
     while (not connected[0]) and (gui.state() != "withdrawn"):
         gui.lift()

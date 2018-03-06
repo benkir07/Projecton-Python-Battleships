@@ -126,6 +126,8 @@ def game(sockets, adresses, names, playingNames, playersListbox, gamesListBox, g
             shooter = 1 - shooter
         sockets[0].send(pickle.dumps(game['ships'][1]))
         sockets[1].send(pickle.dumps(game['ships'][0]))
+    except:
+        pass
     finally:
         map(lambda sock: sock.shutdown(socket.SHUT_RDWR), sockets)
         print names[0], str(adresses[0]), "disconnected"
@@ -166,6 +168,9 @@ def label(text, size, pos, color=(255, 255, 255)):
 server_socket = socket.socket()
 server_socket.bind(('0.0.0.0', 12345))
 server_socket.listen(5)
+udp_server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+udp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
+udp_server.bind(("0.0.0.0", 1234))
 
 width = 200
 height = 500
@@ -263,7 +268,14 @@ while online:
             names.pop(players.index(sock))
             players.remove(sock)
             sock.close()
+    rlist, wlist, xlist = select.select([udp_server], [], [], 0)
+    for sock in rlist:
+        if sock == udp_server:
+            data = sock.recvfrom(1024)
+            if data[0] == "battleships?":
+                udp_server.sendto("indeed", data[1])
 
 server_socket.close()
+udp_server.close()
 pygame.quit()
 gui.destroy()
