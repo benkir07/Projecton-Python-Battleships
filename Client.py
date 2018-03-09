@@ -109,8 +109,9 @@ def connect(client_socket, connected, name, ip, port):
         if name == "name" or name == "":
             tkMessageBox.showerror("Error", "Insert name please")
         else:
-            client_socket.append(socket.create_connection((ip, int(port))))
+            client_socket[0] = (socket.create_connection((ip, int(port))))
             connected[0] = True
+            client_socket[0].send(name)
     except:
         tkMessageBox.showerror("Error", "Could not connect")
 
@@ -333,108 +334,72 @@ def show_state(state):
             label("Defeat!", 28, (410, 80))
 
 
-def game():
-    client_socket = []
-    connected = [False]
-    connectButton.config(command=lambda: connect(client_socket, connected, name.get(), ip.get(), port.get()))
-
-    nameEntry.put_placeholder()
-    ipEntry.put_placeholder()
-    portEntry.put_placeholder()
-    if connection_menu.state() == "withdrawn":
-        connection_menu.deiconify()
-
-    tempSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, True)
-    tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
-    tempSock.settimeout(1)
-    tempSock.sendto("battleships?", ("255.255.255.255", 1234))
+def game(client_socket):
+    global screen
+    pygame.init()
+    screen = pygame.display.set_mode((960, 540))
     try:
-        data = tempSock.recvfrom(1024)
-        if data[0] == "indeed":
-            ipEntry.foc_in()
-            ip.set(data[1][0])
-            portEntry.foc_in()
-            port.set(12345)
-            connection_menu.lift()
-    except:
-        pass
+        board, ships = create_board()
+        temp = []
+        map(lambda ship: temp.append((ship.place, ship.horizontal, ship.width)), ships)
+        client_socket.sendall(pickle.dumps(temp))
 
-    while (not connected[0]) and (connection_menu.state() != "withdrawn"):
-        connection_menu.lift()
-        ip.set(ip.get()[:15])
-        port.set(port.get()[:5])
-        name.set(name.get()[:12])
-        connection_menu.update()
-    connection_menu.withdraw()
+        mini_game(client_socket)
 
-    if connected[0]:
-        try:
-            client_socket = client_socket[0]
-            client_socket.sendall(name.get())
-            mini_game(client_socket)
-            board, ships = create_board()
-            client_socket.sendall(pickle.dumps(board))
-            guesses = []
-            for x in xrange(10):
-                guesses.append([])
-                for y in xrange(10):
-                    guesses[-1].append("")
+        client_socket.sendall(pickle.dumps(board))
+        guesses = []
+        for x in xrange(10):
+            guesses.append([])
+            for y in xrange(10):
+                guesses[-1].append("")
 
-            mini_game(client_socket)
+        opName = client_socket.recv(1024)
+        client_socket.sendall("got name")
 
-            newShips = []
-            map(lambda ship: newShips.append((ship.place, ship.horizontal, ship.width)), ships)
-            client_socket.sendall(pickle.dumps(newShips))
+        finish = False
+        while not finish:
+            role = client_socket.recv(1024)
+            if role == "shoot":
+                shoot(ships, board, guesses, client_socket, opName)
 
-            opName = client_socket.recv(1024)
-            client_socket.sendall("got name")
+                guesses = pickle.loads(client_socket.recv(1024))
+                client_socket.sendall("updated")
 
-            finish = False
-            while not finish:
-                role = client_socket.recv(1024)
-                if role == "shoot":
-                    shoot(ships, board, guesses, client_socket, opName)
+                state = "s" + client_socket.recv(1024)
+            elif role == "watch":
+                watch(ships, board, guesses, client_socket, opName)
 
-                    guesses = pickle.loads(client_socket.recv(1024))
-                    client_socket.sendall("updated")
+                board = pickle.loads(client_socket.recv(1024))
+                client_socket.sendall("updated")
 
-                    state = "s" + client_socket.recv(1024)
-                elif role == "watch":
-                    watch(ships, board, guesses, client_socket, opName)
-
-                    board = pickle.loads(client_socket.recv(1024))
-                    client_socket.sendall("updated")
-
-                    state = "w" + client_socket.recv(1024)
-                if state[1:] == "win":
-                    present_board(ships, board, guesses, opName, pickle.loads(client_socket.recv(1024)))
-                    show_state(state)
-                    con = Button(screen, (30, 60, 200), 750, 40, 160, 60, "Back to main menu", (255, 255, 255), (30, 60, 100), 20)
-                    while not finish:
-                        con.draw()
-                        pygame.display.update()
-                        for event in pygame.event.get():
-                            if event.type == pygame.QUIT:
-                                finish = True
-                                pygame.event.post(pygame.event.Event(pygame.QUIT))
-                        if con.pressed():
-                            finish = True
-                else:
-                    present_board(ships, board, guesses, opName)
-                    show_state(state)
+                state = "w" + client_socket.recv(1024)
+            if state[1:] == "win":
+                present_board(ships, board, guesses, opName, pickle.loads(client_socket.recv(1024)))
+                show_state(state)
+                con = Button(screen, (30, 60, 200), 750, 40, 160, 60, "Back to main menu", (255, 255, 255), (30, 60, 100), 20)
+                while not finish:
+                    con.draw()
                     pygame.display.update()
-                    client_socket.sendall("ready")
-                    watch(ships, board, guesses, client_socket, opName, state)
-
-        except Exception as ex:
-            print repr(ex)
-            if ex.message == ("Close"):
-                client_socket.close()
-                exit()
-            tkMessageBox.showerror("Disconnected", "Your opponent has disconnected")
-        client_socket.close()
-    connected[0] = False
+                    for event in pygame.event.get():
+                        if event.type == pygame.QUIT:
+                            finish = True
+                            pygame.event.post(pygame.event.Event(pygame.QUIT))
+                    if con.pressed():
+                        finish = True
+            else:
+                present_board(ships, board, guesses, opName)
+                show_state(state)
+                pygame.display.update()
+                client_socket.sendall("ready")
+                watch(ships, board, guesses, client_socket, opName, state)
+        return True
+    except Exception as ex:
+        print repr(ex)
+        if ex.message == ("Close"):
+            client_socket.close()
+            exit()
+        tkMessageBox.showerror("Disconnected", "Your opponent has disconnected")
+        return False
 
 
 def rules():
@@ -472,6 +437,10 @@ EXPLOSION_IMAGES = (pygame.image.load("img/blowup1.png"), pygame.image.load("img
     pygame.image.load("img/blowup3.png"), pygame.image.load("img/blowup4.png"),
     pygame.image.load("img/blowup5.png"), pygame.image.load("img/blowup6.png"))
 signs = (pygame.image.load("img/Hit.png"), pygame.image.load("img/Miss.png"))
+#
+
+client_socket = [None]
+connected = [False]
 connection_menu = Tkinter.Tk()
 connection_menu.title("Connection Menu")
 connection_menu.geometry("200x200+200+200")
@@ -488,32 +457,37 @@ ipEntry.pack()
 Tkinter.Label(connection_menu, text="Server port:").pack()
 portEntry = EntryWithPlaceholder(connection_menu, placeholder="12345", textvariable=port)
 portEntry.pack()
-connectButton = Tkinter.Button(connection_menu, text="Connect")
+connectButton = Tkinter.Button(connection_menu, text="Connect", command=lambda: connect(client_socket, connected, name.get(), ip.get(), port.get()))
 connectButton.pack()
-#
 
-pygame.init()
-screen = pygame.display.set_mode((960, 540))
-title = Button(screen, (0, 0, 0), 300, 25, 360, 100, "Battleships", (255, 255, 255), font_size=80)
-play = Button(screen, (30, 60, 200), 380, 165, 190, 70, "Play", (255, 255, 255), (30, 60, 100), 65)
-rulesButton = Button(screen, (30, 60, 200), 380, 275, 190, 70, "Rules", (255, 255, 255), (30, 60, 100), 65)
-exitButton = Button(screen, (30, 60, 200), 380, 375, 190, 70, "Exit", (255, 255, 255), (30, 60, 100), 65)
+tempSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, True)
+tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
+tempSock.settimeout(1)
+tempSock.sendto("battleships?", ("255.255.255.255", 1234))
+try:
+    data = tempSock.recvfrom(1024)
+    if data[0] == "indeed":
+        ipEntry.foc_in()
+        ip.set(data[1][0])
+        portEntry.foc_in()
+        port.set(12345)
+        connection_menu.lift()
+except:
+    pass
 
-finish = False
-while not finish:
-    pygame.display.set_caption("Battleships")
-    screen.blit(pygame.image.load("img/Main.png"), (0, 0))
-    map(Button.draw, [title, play, rulesButton, exitButton])
-    pygame.display.update()
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            finish = True
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if play.highlighted:
-                game()
-            elif rulesButton.highlighted:
-                rules()
-            elif exitButton.highlighted:
-                finish = True
+while (not connected[0]) and (connection_menu.state() != "withdrawn"):
+    connection_menu.lift()
+    ip.set(ip.get()[:15])
+    port.set(port.get()[:5])
+    name.set(name.get()[:12])
+    connection_menu.update()
+connection_menu.destroy()
 
-pygame.quit()
+if connected[0]:
+    if client_socket[0].recv(1024) == "start":
+        if not game(client_socket[0]):
+            connect(client_socket, connected, name.get(), ip.get(), port.get())
+
+
+    client_socket[0].close()
