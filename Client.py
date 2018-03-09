@@ -91,8 +91,8 @@ class EntryWithPlaceholder(Tkinter.Entry):
         if not self.get():
             self.put_placeholder()
 
-    def __init__(self, placeholder="PLACEHOLDER", placeholder_color="dimgray", defcolor="black", textvariable=None, name=None):
-        super(EntryWithPlaceholder, self).__init__(textvariable=textvariable, name=name)
+    def __init__(self, root, placeholder="PLACEHOLDER", placeholder_color="dimgray", defcolor="black", textvariable=None):
+        super(EntryWithPlaceholder, self).__init__(root, textvariable=textvariable)
 
         self.placeholder = placeholder
         self.placeholder_color = placeholder_color
@@ -336,19 +336,18 @@ def show_state(state):
 def game():
     client_socket = []
     connected = [False]
+    connectButton.config(command=lambda: connect(client_socket, connected, name.get(), ip.get(), port.get()))
+
     nameEntry.put_placeholder()
     ipEntry.put_placeholder()
     portEntry.put_placeholder()
-
-    if gui.state() == "withdrawn":
-        gui.deiconify()
-    connectButton.config(command=lambda: connect(client_socket, connected, name.get(), ip.get(), port.get()))
+    if connection_menu.state() == "withdrawn":
+        connection_menu.deiconify()
 
     tempSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, True)
     tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
     tempSock.settimeout(1)
-
     tempSock.sendto("battleships?", ("255.255.255.255", 1234))
     try:
         data = tempSock.recvfrom(1024)
@@ -357,17 +356,17 @@ def game():
             ip.set(data[1][0])
             portEntry.foc_in()
             port.set(12345)
-            gui.lift()
+            connection_menu.lift()
     except:
         pass
 
-    while (not connected[0]) and (gui.state() != "withdrawn"):
-        gui.lift()
+    while (not connected[0]) and (connection_menu.state() != "withdrawn"):
+        connection_menu.lift()
         ip.set(ip.get()[:15])
         port.set(port.get()[:5])
         name.set(name.get()[:12])
-        gui.update()
-    gui.withdraw()
+        connection_menu.update()
+    connection_menu.withdraw()
 
     if connected[0]:
         try:
@@ -473,23 +472,23 @@ EXPLOSION_IMAGES = (pygame.image.load("img/blowup1.png"), pygame.image.load("img
     pygame.image.load("img/blowup3.png"), pygame.image.load("img/blowup4.png"),
     pygame.image.load("img/blowup5.png"), pygame.image.load("img/blowup6.png"))
 signs = (pygame.image.load("img/Hit.png"), pygame.image.load("img/Miss.png"))
-gui = Tkinter.Tk()
-gui.title("Connection Menu")
-gui.geometry("200x200+200+200")
-gui.protocol("WM_DELETE_WINDOW", lambda: gui.withdraw())
+connection_menu = Tkinter.Tk()
+connection_menu.title("Connection Menu")
+connection_menu.geometry("200x200+200+200")
+connection_menu.protocol("WM_DELETE_WINDOW", lambda: connection_menu.withdraw())
 name = Tkinter.StringVar()
 ip = Tkinter.StringVar()
 port = Tkinter.StringVar()
-Tkinter.Label(text="Username:").pack()
-nameEntry = EntryWithPlaceholder(placeholder="name", textvariable=name)
+Tkinter.Label(connection_menu, text="Username:").pack()
+nameEntry = EntryWithPlaceholder(connection_menu, placeholder="name", textvariable=name)
 nameEntry.pack()
-Tkinter.Label(text="Server ip:").pack()
-ipEntry = EntryWithPlaceholder(placeholder="127.0.0.1", textvariable=ip)
+Tkinter.Label(connection_menu, text="Server ip:").pack()
+ipEntry = EntryWithPlaceholder(connection_menu, placeholder="127.0.0.1", textvariable=ip)
 ipEntry.pack()
-Tkinter.Label(text="Server port:").pack()
-portEntry = EntryWithPlaceholder(placeholder="12345", textvariable=port)
+Tkinter.Label(connection_menu, text="Server port:").pack()
+portEntry = EntryWithPlaceholder(connection_menu, placeholder="12345", textvariable=port)
 portEntry.pack()
-connectButton = Tkinter.Button(text="Connect")
+connectButton = Tkinter.Button(connection_menu, text="Connect")
 connectButton.pack()
 #
 
