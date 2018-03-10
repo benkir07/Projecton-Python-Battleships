@@ -443,7 +443,7 @@ client_socket = [None]
 connected = [False]
 connection_menu = Tkinter.Tk()
 connection_menu.title("Connection Menu")
-connection_menu.geometry("200x200+200+200")
+connection_menu.geometry("200x200")
 connection_menu.protocol("WM_DELETE_WINDOW", lambda: connection_menu.withdraw())
 name = Tkinter.StringVar()
 ip = Tkinter.StringVar()
@@ -490,4 +490,5 @@ if connected[0]:
             connect(client_socket, connected, name.get(), ip.get(), port.get())
 
 
+if connected[0]:
     client_socket[0].close()

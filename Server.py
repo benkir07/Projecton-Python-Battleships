@@ -7,7 +7,6 @@ from random import randint
 import pygame
 
 
-
 class Battleship(object):
     def __init__(self, surface, x, y, width):
         self.surface = surface
@@ -21,6 +20,16 @@ class Battleship(object):
         myFont = pygame.font.SysFont("Calibri", 30)
         myText = myFont.render(self.text, 1, (0, 0, 0))
         self.surface.blit(myText, ((self.rect[0] + self.rect[2] / 2) - myText.get_width() / 2, (self.rect[1] + self.rect[3] / 2) - myText.get_height() / 2))
+
+
+class Player(object):
+    def __init__(self, socket, address, name):
+        self.socket = socket
+        self.address = address
+        self.name = name
+
+    def __repr__(self):
+        return self.name + " " + str(self.address)
 
 
 def present_board(ships, guesses, offset):
@@ -88,7 +97,7 @@ def turn(shooter, watcher, guesses, board, ships):
 
 
 def game(players, playersListbox, gamesListBox, games):
-    gameID = players[0][2] + " vs " + players[1][2]
+    gameID = players[0].name + " vs " + players[1].name
     gamesListbox.insert(Tkinter.END, gameID)
     print "Game: " + gameID
     games[gameID] = {}
@@ -102,55 +111,55 @@ def game(players, playersListbox, gamesListBox, games):
             game['guesses'][0][-1].append("")
             game['guesses'][1][-1].append("")
     try:
-        players[0][0].sendall("start")
-        players[1][0].sendall("start")
+        players[0].socket.sendall("start")
+        players[1].socket.sendall("start")
 
         game['ships'] = [None, None]
         while game['ships'][0] == None or game['ships'][1] == None:
-            rlist, wlist, xlist = select.select([players[0][0], players[1][0]], [], [], 0)
+            rlist, wlist, xlist = select.select([players[0].socket, players[1].socket], [], [], 0)
             for sock in rlist:
-                if sock == players[0][0]:
-                    game['ships'][0] = pickle.loads(players[0][0].recv(1024))
+                if sock == players[0].socket:
+                    game['ships'][0] = pickle.loads(players[0].socket.recv(1024))
                 else:
-                    game['ships'][1] = pickle.loads(players[1][0].recv(1024))
+                    game['ships'][1] = pickle.loads(players[1].socket.recv(1024))
 
-        players[0][0].sendall("start")
-        players[1][0].sendall("start")
+        players[0].socket.sendall("start")
+        players[1].socket.sendall("start")
 
-        boards = [pickle.loads(players[0][0].recv(1024)), pickle.loads(players[1][0].recv(1024))]
+        boards = [pickle.loads(players[0].socket.recv(1024)), pickle.loads(players[1].socket.recv(1024))]
 
-        players[0][0].sendall(players[1][2])
-        players[1][0].sendall(players[0][2])
+        players[0].socket.sendall(players[1].name)
+        players[1].socket.sendall(players[0].name)
 
-        if players[0][0].recv(1024) == "got name" and players[1][0].recv(1024) == "got name":
+        if players[0].socket.recv(1024) == "got name" and players[1].socket.recv(1024) == "got name":
             pass
 
         finish = False
 
         shooter = randint(0, 1)
         while not finish:
-            game['shooter'] = players[shooter][2]
-            finish = turn(players[shooter][0], players[1-shooter][0], game['guesses'][shooter], boards[1-shooter], game['ships'][1-shooter])
+            game['shooter'] = players[shooter].name
+            finish = turn(players[shooter].socket, players[1-shooter].socket, game['guesses'][shooter], boards[1-shooter], game['ships'][1-shooter])
             shooter = 1 - shooter
-        players[0][0].sendall(pickle.dumps(game['ships'][1]))
-        players[1][0].sendall(pickle.dumps(game['ships'][0]))
+        players[0].socket.sendall(pickle.dumps(game['ships'][1]))
+        players[1].socket.sendall(pickle.dumps(game['ships'][0]))
 
-        globals()["players"][players[0][0]] = [players[0][1], players[0][2]]
-        globals()["players"][players[1][0]] = [players[1][1], players[1][2]]
+        globals()["players"][players[0].socket] = players[0]
+        globals()["players"][players[1].socket] = players[1]
     except:
-        players[0][0].shutdown(socket.SHUT_RDWR)
-        players[1][0].shutdown(socket.SHUT_RDWR)
+        players[0].socket.shutdown(socket.SHUT_RDWR)
+        players[1].socket.shutdown(socket.SHUT_RDWR)
         for i in xrange(playersListbox.size()):
-            if playersListbox.get(i) == players[0][2]:
+            if playersListbox.get(i) == players[0].name:
                 playersListbox.delete(i)
         for i in xrange(playersListbox.size()):
-            if playersListbox.get(i) == players[1][2]:
+            if playersListbox.get(i) == players[1].name:
                 playersListbox.delete(i)
-        print players[0][2], str(players[0][1]), "disconnected"
-        print players[1][2], str(players[1][1]), "disconnected"
+        print players[0], "disconnected"
+        print players[0], "disconnected"
         global names
-        names.remove(players[0][2])
-        names.remove(players[1][2])
+        names.remove(players[0].name)
+        names.remove(players[1].name)
     finally:
         for i in xrange(gamesListBox.size()):
             if gamesListBox.get(i) == gameID:
@@ -191,7 +200,7 @@ height = 500
 
 gui = Tkinter.Tk()
 gui.title("Battleships server")
-gui.geometry("%sx%s+200+200" % (str(width), str(height)))
+gui.geometry(str(width) + "x" + str(height))
 gui.resizable(0, 0)
 gui.protocol("WM_DELETE_WINDOW", shutdown)
 
@@ -265,24 +274,24 @@ while online:
             newSock, addr = server_socket.accept()
             insert_name(newSock.recv(1024), names)
             playersListbox.insert(Tkinter.END, names[-1])
-            players[newSock] = [addr, names[-1]]
+            players[newSock] = Player(newSock, addr, names[-1])
             print names[-1], "connected from", str(addr)
 
-            rooms[0].append([newSock, addr, names[-1]])
+            rooms[0].append(players[newSock])
 
         else:
             data = sock.recv(1024)
             if data == "":
-                print players[sock][1], players[sock][0], "disconnected"
+                print players[sock], "disconnected"
                 for i in xrange(playersListbox.size()):
-                    if playersListbox.get(i) == players[sock][1]:
+                    if playersListbox.get(i) == players[sock].name:
                         playersListbox.delete(i)
                         break
                 for room in rooms:
                     for player in room:
-                        if sock in player:
+                        if player.socket == sock:
                             room.remove(player)
-                names.remove(players[sock][1])
+                names.remove(players[sock].name)
                 players.pop(sock)
                 sock.close()
     rlist, wlist, xlist = select.select([udp_server], [], [], 0)
@@ -293,8 +302,8 @@ while online:
                 udp_server.sendto("indeed", data[1])
     for room in rooms:
         if len(room) == 2:
-            players.pop(room[0][0])
-            players.pop(room[1][0])
+            players.pop(room[0].socket)
+            players.pop(room[1].socket)
             thread.start_new_thread(game, (room, playersListbox, gamesListbox, games))
             rooms.remove(room)
     if len(rooms) == 0:
