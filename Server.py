@@ -32,6 +32,41 @@ class Player(object):
         return self.name + " " + str(self.address)
 
 
+class ServerGUI(Tkinter.Tk):
+    width = 200
+    height = 500
+
+    def __init__(self):
+        super(ServerGUI, self).__init__()
+        self.title("Battleships server")
+        self.geometry(str(self.width) + "x" + str(self.height))
+        self.resizable(0, 0)
+        self.protocol("WM_DELETE_WINDOW", shutdown)
+
+        Tkinter.Label(text="Players:").place(x=0, y=0, height=20)
+        self.playersScroll = Tkinter.Scrollbar()
+        self.playersScroll.place(x=self.width-15, y=20, width=15, height=self.height/3)
+        self.playersListbox = Tkinter.Listbox(yscrollcommand=self.playersScroll.set)
+        self.playersListbox.place(x=0, y=20, width=self.width-15, height=self.height/3)
+        self.playersScroll.config(command=self.playersListbox.yview)
+
+        Tkinter.Label(text="Games:").place(x=0, y=25+self.height/3, height=20)
+        self.gamesScroll = Tkinter.Scrollbar()
+        self.gamesScroll.place(x=self.width-15, y=45+self.height/3, width=15, height=self.height/3)
+        self.gamesListbox = Tkinter.Listbox(yscrollcommand=self.gamesScroll.set)
+        self.gamesListbox.place(x=0, y=45+self.height/3, width=self.width-15, height=self.height/3)
+        self.gamesScroll.config(command=self.gamesListbox.yview)
+
+        self.shutdownButton = Tkinter.Button(text="Stop server", command=shutdown)
+        self.shutdownButton.place(x=self.width/4, y=50+2*self.height/3, width=self.width/2, height=25)
+
+    @property
+    def curr_game(self):
+        if len(gui.gamesListbox.curselection()) > 0:
+            return self.gamesListbox.get(gui.gamesListbox.curselection()[0])
+        return False
+
+
 def present_board(ships, guesses, offset):
     for ship in ships:
         temp = Battleship(screen, offset[0] + ship[0][0] * slotwidth, offset[1] + ship[0][1] * slotwidth, ship[2])
@@ -98,7 +133,7 @@ def turn(shooter, watcher, guesses, board, ships):
 
 def game(players, playersListbox, gamesListBox, games):
     gameID = players[0].name + " vs " + players[1].name
-    gamesListbox.insert(Tkinter.END, gameID)
+    gamesListBox.insert(Tkinter.END, gameID)
     print "Game: " + gameID
     games[gameID] = {}
     game = games[gameID]
@@ -188,38 +223,26 @@ def label(text, size, pos, color=(255, 255, 255)):
     screen.blit(myText, pos)
 
 
+def identify():
+    udp_server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
+    udp_server.bind(("0.0.0.0", 1234))
+    udp_server.setblocking(False)
+    while online:
+        try:
+            data = udp_server.recvfrom(1024)
+            if data[0] == "battleships?":
+                udp_server.sendto("indeed", data[1])
+        except:
+            pass
+    udp_server.close()
+
+
 server_socket = socket.socket()
 server_socket.bind(('0.0.0.0', 12345))
 server_socket.listen(5)
-udp_server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-udp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
-udp_server.bind(("0.0.0.0", 1234))
 
-width = 200
-height = 500
-
-gui = Tkinter.Tk()
-gui.title("Battleships server")
-gui.geometry(str(width) + "x" + str(height))
-gui.resizable(0, 0)
-gui.protocol("WM_DELETE_WINDOW", shutdown)
-
-Tkinter.Label(text="Players:").place(x=0, y=0, height=20)
-playersScroll = Tkinter.Scrollbar()
-playersScroll.place(x=width-15, y=20, width=15, height=height/3)
-playersListbox = Tkinter.Listbox(yscrollcommand=playersScroll.set)
-playersListbox.place(x=0, y=20, width=width-15, height=height/3)
-playersScroll.config(command=playersListbox.yview)
-
-Tkinter.Label(text="Games:").place(x=0, y=25+height/3, height=20)
-gamesScroll = Tkinter.Scrollbar()
-gamesScroll.place(x=width-15, y=45+height/3, width=15, height=height/3)
-gamesListbox = Tkinter.Listbox(yscrollcommand=gamesScroll.set)
-gamesListbox.place(x=0, y=45+height/3, width=width-15, height=height/3)
-gamesScroll.config(command=gamesListbox.yview)
-
-shutdownButton = Tkinter.Button(text="Stop server", command=shutdown)
-shutdownButton.place(x=width/4, y=50+2*height/3, width=width/2, height=25)
+gui = ServerGUI()
 
 slotwidth = 36
 pygame.init()
@@ -240,27 +263,26 @@ rooms = []
 games = {}
 
 online = True
+thread.start_new_thread(identify, tuple())
 while online:
     screen.blit(background, (0, 0))
     screen.blit(visualBoard, (45, 150))
     screen.blit(visualBoard, (555, 150))
-    if len(gamesListbox.curselection()) > 0:
-        gameID = gamesListbox.get(gamesListbox.curselection()[0])
-        pygame.display.set_caption(gameID)
-        names = gameID.split(" vs ")
+    if gui.curr_game:
+        pygame.display.set_caption(gui.curr_game)
+        names = gui.curr_game.split(" vs ")
         try:
             label(str((12 - len(names[0])) * " " + "{}'s board" + (12 - len(names[0])) * " ").format(names[0]), 20, (110, 110))
             label(str((12 - len(names[1])) * " " + "{}'s board" + (12 - len(names[1])) * " ").format(names[1]), 20, (650, 110))
-            present_board(games[gameID]['ships'][0], games[gameID]['guesses'][1], (47, 152))
-            present_board(games[gameID]['ships'][1], games[gameID]['guesses'][0], (557, 152))
-            text = "{}'s Turn".format(games[gameID]['shooter'])
+            present_board(games[gui.curr_game]['ships'][0], games[gui.curr_game]['guesses'][1], (47, 152))
+            present_board(games[gui.curr_game]['ships'][1], games[gui.curr_game]['guesses'][0], (557, 152))
+            text = "{}'s Turn".format(games[gui.curr_game]['shooter'])
             label((40 - len(text)) / 2 * " " + text + (40 - len(text)) / 2 * " ", 48, (190, 50))
-        except Exception as ex:
+        except:
             try:
-                present_board(games[gameID]['ships'][1], games[gameID]['guesses'][0], (557, 152))
+                present_board(games[gui.curr_game]['ships'][1], games[gui.curr_game]['guesses'][0], (557, 152))
             except:
                 pass
-            #print repr(ex)
             label("Players placing ships", 48, (220, 45))
     else:
         pygame.display.set_caption("Battleships")
@@ -273,7 +295,7 @@ while online:
         if sock == server_socket:
             newSock, addr = server_socket.accept()
             insert_name(newSock.recv(1024), names)
-            playersListbox.insert(Tkinter.END, names[-1])
+            gui.playersListbox.insert(Tkinter.END, names[-1])
             players[newSock] = Player(newSock, addr, names[-1])
             print names[-1], "connected from", str(addr)
 
@@ -283,9 +305,9 @@ while online:
             data = sock.recv(1024)
             if data == "":
                 print players[sock], "disconnected"
-                for i in xrange(playersListbox.size()):
-                    if playersListbox.get(i) == players[sock].name:
-                        playersListbox.delete(i)
+                for i in xrange(gui.playersListbox.size()):
+                    if gui.playersListbox.get(i) == players[sock].name:
+                        gui.playersListbox.delete(i)
                         break
                 for room in rooms:
                     for player in room:
@@ -294,22 +316,15 @@ while online:
                 names.remove(players[sock].name)
                 players.pop(sock)
                 sock.close()
-    rlist, wlist, xlist = select.select([udp_server], [], [], 0)
-    for sock in rlist:
-        if sock == udp_server:
-            data = sock.recvfrom(1024)
-            if data[0] == "battleships?":
-                udp_server.sendto("indeed", data[1])
     for room in rooms:
         if len(room) == 2:
             players.pop(room[0].socket)
             players.pop(room[1].socket)
-            thread.start_new_thread(game, (room, playersListbox, gamesListbox, games))
+            thread.start_new_thread(game, (room, gui.playersListbox, gui.gamesListbox, games))
             rooms.remove(room)
     if len(rooms) == 0:
         rooms.append([])
 
 server_socket.close()
-udp_server.close()
 pygame.quit()
 gui.destroy()

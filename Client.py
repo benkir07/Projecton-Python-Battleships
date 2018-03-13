@@ -76,44 +76,42 @@ class Battleship(Button):
         self.horizontal = not self.horizontal
 
 
-class EntryWithPlaceholder(Tkinter.Entry):
-    def put_placeholder(self):
-        self.delete(0, Tkinter.END)
-        self.insert(0, self.placeholder)
-        self.config(fg=self.placeholder_color)
+class ConnectionMenu(Tkinter.Tk):
+    def __init__(self):
+        super(ConnectionMenu, self).__init__()
+        self.title("Connection Menu")
+        self.geometry("200x200")
+        self.protocol("WM_DELETE_WINDOW", lambda: self.withdraw())
+        self.name = Tkinter.StringVar()
+        self.ip = Tkinter.StringVar()
+        self.port = Tkinter.StringVar()
+        Tkinter.Label(self, text="Username:").pack()
+        self.name_entry = Tkinter.Entry(self, textvariable=self.name)
+        self.name_entry.pack()
+        Tkinter.Label(self, text="Server ip:").pack()
+        self.ip_entry = Tkinter.Entry(self, textvariable=self.ip)
+        self.ip_entry.pack()
+        Tkinter.Label(self, text="Server port:").pack()
+        self.port_entry = Tkinter.Entry(self, textvariable=self.port)
+        self.port_entry.pack()
+        Tkinter.Button(self, text="Connect", command=self.connect).pack()
 
-    def foc_in(self, *args):
-        if self['fg'] == self.placeholder_color:
-            self.delete('0', Tkinter.END)
-            self.config(fg=self.default_fg_color)
+    def connect(self):
+        try:
+            if self.name.get() == "":
+                tkMessageBox.showerror("Error", "Insert name please")
+            else:
+                client_socket[0] = (socket.create_connection((self.ip.get(), int(self.port.get()))))
+                connected[0] = True
+                client_socket[0].send(self.name.get())
+        except Exception as ex:
+            print repr(ex)
+            tkMessageBox.showerror("Error", "Could not connect")
 
-    def foc_out(self, *args):
-        if not self.get():
-            self.put_placeholder()
-
-    def __init__(self, root, placeholder="PLACEHOLDER", placeholder_color="dimgray", defcolor="black", textvariable=None):
-        super(EntryWithPlaceholder, self).__init__(root, textvariable=textvariable)
-
-        self.placeholder = placeholder
-        self.placeholder_color = placeholder_color
-        self.default_fg_color = defcolor
-
-        self.bind("<FocusIn>", self.foc_in)
-        self.bind("<FocusOut>", self.foc_out)
-
-        self.put_placeholder()
-
-
-def connect(client_socket, connected, name, ip, port):
-    try:
-        if name == "name" or name == "":
-            tkMessageBox.showerror("Error", "Insert name please")
-        else:
-            client_socket[0] = (socket.create_connection((ip, int(port))))
-            connected[0] = True
-            client_socket[0].send(name)
-    except:
-        tkMessageBox.showerror("Error", "Could not connect")
+    def limit(self):
+        self.ip.set(self.ip.get()[:15])
+        self.port.set(self.port.get()[:5])
+        self.name.set(self.name.get()[:12])
 
 
 def label(text, size, pos, color=(255, 255, 255)):
@@ -431,34 +429,14 @@ for y in xrange(0, slotwidth*10, slotwidth):
     for x in xrange(0, slotwidth*10, slotwidth):
         pygame.draw.rect(visualBoard, (30, 60, 200), pygame.Rect(x, y, slotwidth, slotwidth))
         pygame.draw.rect(visualBoard, (255, 255, 255), pygame.Rect(x, y, slotwidth, slotwidth), 1)
-RULES = (pygame.image.load("img/Rules1.png"), pygame.image.load("img/Rules2.png"),
-    pygame.image.load("img/Rules3.png"))
-EXPLOSION_IMAGES = (pygame.image.load("img/blowup1.png"), pygame.image.load("img/blowup2.png"),
-    pygame.image.load("img/blowup3.png"), pygame.image.load("img/blowup4.png"),
-    pygame.image.load("img/blowup5.png"), pygame.image.load("img/blowup6.png"))
+RULES = (pygame.image.load("img/Rules1.png"), pygame.image.load("img/Rules2.png"), pygame.image.load("img/Rules3.png"))
+EXPLOSION_IMAGES = (pygame.image.load("img/blowup1.png"), pygame.image.load("img/blowup2.png"), pygame.image.load("img/blowup3.png"), pygame.image.load("img/blowup4.png"), pygame.image.load("img/blowup5.png"), pygame.image.load("img/blowup6.png"))
 signs = (pygame.image.load("img/Hit.png"), pygame.image.load("img/Miss.png"))
 #
 
 client_socket = [None]
 connected = [False]
-connection_menu = Tkinter.Tk()
-connection_menu.title("Connection Menu")
-connection_menu.geometry("200x200")
-connection_menu.protocol("WM_DELETE_WINDOW", lambda: connection_menu.withdraw())
-name = Tkinter.StringVar()
-ip = Tkinter.StringVar()
-port = Tkinter.StringVar()
-Tkinter.Label(connection_menu, text="Username:").pack()
-nameEntry = EntryWithPlaceholder(connection_menu, placeholder="name", textvariable=name)
-nameEntry.pack()
-Tkinter.Label(connection_menu, text="Server ip:").pack()
-ipEntry = EntryWithPlaceholder(connection_menu, placeholder="127.0.0.1", textvariable=ip)
-ipEntry.pack()
-Tkinter.Label(connection_menu, text="Server port:").pack()
-portEntry = EntryWithPlaceholder(connection_menu, placeholder="12345", textvariable=port)
-portEntry.pack()
-connectButton = Tkinter.Button(connection_menu, text="Connect", command=lambda: connect(client_socket, connected, name.get(), ip.get(), port.get()))
-connectButton.pack()
+connection_menu = ConnectionMenu()
 
 tempSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, True)
@@ -468,27 +446,21 @@ tempSock.sendto("battleships?", ("255.255.255.255", 1234))
 try:
     data = tempSock.recvfrom(1024)
     if data[0] == "indeed":
-        ipEntry.foc_in()
-        ip.set(data[1][0])
-        portEntry.foc_in()
-        port.set(12345)
-        connection_menu.lift()
+        connection_menu.ip.set(data[1][0])
+        connection_menu.port.set(12345)
 except:
     pass
 
-while (not connected[0]) and (connection_menu.state() != "withdrawn"):
+while not connected[0] and connection_menu.state() != "withdrawn":
     connection_menu.lift()
-    ip.set(ip.get()[:15])
-    port.set(port.get()[:5])
-    name.set(name.get()[:12])
+    connection_menu.limit()
     connection_menu.update()
-connection_menu.destroy()
+connection_menu.withdraw()
 
 if connected[0]:
     if client_socket[0].recv(1024) == "start":
         if not game(client_socket[0]):
-            connect(client_socket, connected, name.get(), ip.get(), port.get())
-
+            connection_menu.connect()
 
 if connected[0]:
     client_socket[0].close()
