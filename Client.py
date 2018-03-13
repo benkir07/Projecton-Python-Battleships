@@ -104,6 +104,7 @@ class ConnectionMenu(Tkinter.Tk):
                 client_socket[0] = (socket.create_connection((self.ip.get(), int(self.port.get()))))
                 connected[0] = True
                 client_socket[0].send(self.name.get())
+                self.name.set(client_socket[0].recv(1024))
         except Exception as ex:
             print repr(ex)
             tkMessageBox.showerror("Error", "Could not connect")
@@ -112,6 +113,146 @@ class ConnectionMenu(Tkinter.Tk):
         self.ip.set(self.ip.get()[:15])
         self.port.set(self.port.get()[:5])
         self.name.set(self.name.get()[:12])
+
+
+class LobbyGUI(Tkinter.Tk):
+    height = 500
+    width = 800
+
+    def __init__(self, client_socket):
+        super(LobbyGUI, self).__init__()
+        self.geometry(str(self.width) + "x" + str(self.height))
+        self.resizable(0, 0)
+        self.title("Lobby")
+        self.protocol("WM_DELETE_WINDOW", lambda: self.withdraw())
+        self.client_socket = client_socket
+        self.lobbies = Lobby(self, self.height, self.width-200, self.client_socket)
+        self.lobbies.pack(side=Tkinter.LEFT)
+        self.chat = Chat(self, self.height, 200)
+        self.chat.pack(side=Tkinter.RIGHT)
+
+    def mainloop(self):
+        lobby = True
+        while lobby and self.state() != "withdrawn":
+            self.update()
+            self.chat.update()
+            self.lobbies.update()
+            rlist, wlist, xlist = select.select([self.client_socket], [], [], 0)
+            for sock in rlist:
+                data = sock.recv(1024)
+                if data == "start":
+                    lobby = False
+        if self.state() == "withdrawn":
+            self.client_socket.close()
+            self.chat.close()
+            quit()
+        self.withdraw()
+
+
+class Lobby(Tkinter.Frame):
+    def __init__(self, master, height, width, client_socket):
+        super(Lobby, self).__init__(master, height=height, width=width)
+        self.master = master
+        self.client_socket = client_socket
+
+        Tkinter.Label(self, text="Open Rooms:").place(height=20)
+        Tkinter.Label(self, text="Room Name:").place(y=20, height=20)
+        Tkinter.Label(self, text="Players:").place(x=(width-15)/3, y=20, height=20)
+        Tkinter.Label(self, text="Requires Password?:").place(x=2*(width-15)/3, y=20, height=20)
+        self.rooms_scrollbar = Tkinter.Scrollbar(self, command=self.rooms_scroll)
+        self.rooms_names = Tkinter.Listbox(self, yscrollcommand=self.rooms_mouse_wheel, exportselection=0)
+        self.rooms_players = Tkinter.Listbox(self, yscrollcommand=self.rooms_mouse_wheel, exportselection=0)
+        self.rooms_password = Tkinter.Listbox(self, yscrollcommand=self.rooms_mouse_wheel, exportselection=0)
+        self.rooms_scrollbar.place(x=width-15, y=40, height=(height-60)/2, width=15)
+        self.rooms_names.place(y=40, height=(height-60)/2, width=(width-15)/3)
+        self.rooms_players.place(x=(width-15)/3, y=40, height=(height-60)/2, width=(width-15)/3)
+        self.rooms_password.place(x=2*(width-15)/3, y=40, height=(height-60)/2, width=(width-15)/3)
+
+        Tkinter.Label(self, text="Ongoing Games:").place(y=40+(height-60)/2, height=20)
+        self.games_scrollbar = Tkinter.Scrollbar(self)
+        self.games_list = Tkinter.Listbox(self, yscrollcommand=self.games_scrollbar.set)
+        self.games_scrollbar.config(command=self.games_list.yview)
+        self.games_scrollbar.place(x=width-15, y=60+(height-60)/2, height=(height-60)/2, width=15)
+        self.games_list.place(y=60+(height-60)/2, height=(height-60)/2, width=width-15)
+
+        rooms, games = client_socket.recv(1024).split("\n\n")
+
+        for room in rooms.split("\n"):
+            room = room.split(";")
+            self.rooms_names.insert(Tkinter.END, room[0])
+            self.rooms_players.insert(Tkinter.END, room[1])
+            self.rooms_password.insert(Tkinter.END, room[2])
+        for game in games.split("\n"):
+            self.games_list.insert(Tkinter.END, game)
+
+
+    def rooms_scroll(self, *args):
+        self.rooms_names.yview(*args)
+        self.rooms_players.yview(*args)
+        self.rooms_password.yview(*args)
+
+    def rooms_mouse_wheel(self, *args):
+        self.rooms_scrollbar.set(*args)
+        self.rooms_scroll("moveto", str(args[0]))
+
+    def update(self):
+        if self.focus_get() == self.rooms_names or self.focus_get() == self.rooms_players or self.focus_get() == self.rooms_password:
+            if len(self.focus_get().curselection()) > 0:
+                num = self.focus_get().curselection()[0]
+                self.rooms_names.selection_clear(0, Tkinter.END)
+                self.rooms_players.selection_clear(0, Tkinter.END)
+                self.rooms_password.selection_clear(0, Tkinter.END)
+                self.rooms_names.select_set(num)
+                self.rooms_players.select_set(num)
+                self.rooms_password.select_set(num)
+
+
+class Chat(Tkinter.Frame):
+    def __init__(self, master, height, width):
+        super(Chat, self).__init__(master, height=height, width=width)
+        self.master = master
+        self.chat_socket = socket.create_connection((connection_menu.ip.get(), 123))
+        self.chat_socket.send(connection_menu.name.get())
+        self.bind("<Return>", self.send)
+        self.message_scroll = Tkinter.Scrollbar(self)
+        self.messages = Tkinter.Listbox(self, yscrollcommand=self.message_scroll.set)
+        self.message_scroll.config(command=self.messages.yview)
+        self.message_scroll.place(x=width - 15, height=height - 20, width=15)
+        self.messages.place(height=height - 20, width=width - 15)
+
+        self.message = Tkinter.StringVar(self)
+        self.message_box = Tkinter.Entry(self, textvariable=self.message)
+        self.message_box.place(y=height - 20, height=20, width=width * 0.6)
+
+        self.length = Tkinter.StringVar(self)
+        self.length_box = Tkinter.Label(self, textvariable=self.length)
+        self.length_box.place(x=width * 0.6, y=height - 20, height=20, width=width * 0.2)
+
+        self.sendButton = Tkinter.Button(self, text="Send", command=self.send)
+        self.sendButton.place(x=width * 0.8, y=height - 20, height=20, width=width * 0.2)
+
+    def send(self, event=None):
+        if self.message.get().replace(" ", "") != "":
+            self.chat_socket.send(self.message.get())
+        self.message.set("")
+
+    def update(self):
+        rlist, wlist, xlist = select.select([self.chat_socket], [], [], 0)
+        for current_socket in rlist:
+            data = current_socket.recv(1024)
+            if data == "":
+                tkMessageBox.showerror("Disconnect", "Disconnected from server")
+                self.master.withdraw()
+            else:
+                self.messages.insert(Tkinter.END, data)
+                self.messages.select_set(Tkinter.END)
+                self.messages.yview(Tkinter.END)
+        self.message.set(self.message.get()[:50])
+        self.length.set(str(50 - len(self.message.get())) + "/50")
+        self.messages.selection_clear(0, Tkinter.END)
+
+    def close(self):
+        self.chat_socket.close()
 
 
 def label(text, size, pos, color=(255, 255, 255)):
@@ -395,7 +536,7 @@ def game(client_socket):
         print repr(ex)
         if ex.message == ("Close"):
             client_socket.close()
-            exit()
+            quit()
         tkMessageBox.showerror("Disconnected", "Your opponent has disconnected")
         return False
 
@@ -458,9 +599,9 @@ while not connected[0] and connection_menu.state() != "withdrawn":
 connection_menu.withdraw()
 
 if connected[0]:
-    if client_socket[0].recv(1024) == "start":
-        if not game(client_socket[0]):
-            connection_menu.connect()
+    LobbyGUI(client_socket[0]).mainloop()
+    if not game(client_socket[0]):
+        connection_menu.connect()
 
 if connected[0]:
     client_socket[0].close()

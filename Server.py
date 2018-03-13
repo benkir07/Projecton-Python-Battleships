@@ -34,7 +34,7 @@ class Player(object):
 
 class ServerGUI(Tkinter.Tk):
     width = 200
-    height = 500
+    height = 300
 
     def __init__(self):
         super(ServerGUI, self).__init__()
@@ -62,9 +62,26 @@ class ServerGUI(Tkinter.Tk):
 
     @property
     def curr_game(self):
-        if len(gui.gamesListbox.curselection()) > 0:
-            return self.gamesListbox.get(gui.gamesListbox.curselection()[0])
+        if len(self.gamesListbox.curselection()) > 0:
+            return self.gamesListbox.get(self.gamesListbox.curselection()[0])
         return False
+
+
+class Room(object):
+    def __init__(self, name, player, hidden, password=None):
+        self.name = name
+        self.password = password
+        self.players = [player]
+        self.hidden = hidden
+
+    def __len__(self):
+        return len(self.players)
+
+    def __getitem__(self, item):
+        return self.players[item]
+
+    def __repr__(self):
+        return self.name + ";" + self.players[0].name + ";" + str(self.password != None)
 
 
 def present_board(ships, guesses, offset):
@@ -238,6 +255,42 @@ def identify():
     udp_server.close()
 
 
+def chat():
+    chat_server = socket.socket()
+    chat_server.bind(('0.0.0.0', 123))
+    chat_server.listen(5)
+    open_client_sockets = []
+    names = {}
+
+    while online:
+        rlist, wlist, xlist = select.select([chat_server] + open_client_sockets, [], [], 0)
+        for current_socket in rlist:
+            if current_socket is chat_server:
+                newSock, addr = chat_server.accept()
+                open_client_sockets.append(newSock)
+                names[newSock] = newSock.recv(1024)
+            else:
+                data = current_socket.recv(1024)
+                if data == "":
+                    names.pop(current_socket)
+                    open_client_sockets.remove(current_socket)
+                else:
+                    for client in open_client_sockets:
+                        client.send(names[current_socket] + ": " + data)
+    chat_server.close()
+
+
+def lobby_data(rooms, games):
+    ret = ""
+    for room in rooms:
+        if not room.hidden:
+            ret += repr(room) + "\n"
+    ret += "\n"
+    for game in games.keys():
+        ret += game + "\n"
+    return ret[:-1]
+
+
 server_socket = socket.socket()
 server_socket.bind(('0.0.0.0', 12345))
 server_socket.listen(5)
@@ -264,6 +317,7 @@ games = {}
 
 online = True
 thread.start_new_thread(identify, tuple())
+thread.start_new_thread(chat, tuple())
 while online:
     screen.blit(background, (0, 0))
     screen.blit(visualBoard, (45, 150))
@@ -295,12 +349,11 @@ while online:
         if sock == server_socket:
             newSock, addr = server_socket.accept()
             insert_name(newSock.recv(1024), names)
+            newSock.send(names[-1])
             gui.playersListbox.insert(Tkinter.END, names[-1])
             players[newSock] = Player(newSock, addr, names[-1])
             print names[-1], "connected from", str(addr)
-
-            rooms[0].append(players[newSock])
-
+            newSock.send(lobby_data(rooms, games))
         else:
             data = sock.recv(1024)
             if data == "":
@@ -320,10 +373,8 @@ while online:
         if len(room) == 2:
             players.pop(room[0].socket)
             players.pop(room[1].socket)
-            thread.start_new_thread(game, (room, gui.playersListbox, gui.gamesListbox, games))
+            thread.start_new_thread(game, (room.players, gui.playersListbox, gui.gamesListbox, games))
             rooms.remove(room)
-    if len(rooms) == 0:
-        rooms.append([])
 
 server_socket.close()
 pygame.quit()
