@@ -37,7 +37,7 @@ class ServerGUI(Tkinter.Tk):
     height = 300
 
     def __init__(self):
-        super(ServerGUI, self).__init__()
+        Tkinter.Tk.__init__(self)
         self.title("Battleships server")
         self.geometry(str(self.width) + "x" + str(self.height))
         self.resizable(0, 0)
@@ -68,11 +68,67 @@ class ServerGUI(Tkinter.Tk):
 
 
 class Room(object):
-    def __init__(self, name, player, hidden, password=None):
+    def __init__(self, name, player, hidden, password):
         self.name = name
         self.password = password
         self.players = [player]
         self.hidden = hidden
+
+    def update(self):
+        sockets = []
+        for pl in self.players:
+            sockets.append(pl.socket)
+        rlist, wlist, xlist = select.select(sockets, [], [], 0)
+        for sock in rlist:
+            for pl in self.players:
+                if pl.socket == sock:
+                    player = pl
+            try:
+                data = sock.recv(1024)
+                if data == "":
+                    print player, "disconnected"
+                    self.players.remove(player)
+                    if len(self) == 0:
+                        rooms.remove(self)
+                    for i in xrange(gui.playersListbox.size()):
+                        if gui.playersListbox.get(i) == player.name:
+                            gui.playersListbox.delete(i)
+                            break
+                    names.remove(player.name)
+                    sock.close()
+                    map(lambda sock: sock.sendall("new;"), players.keys())
+                else:
+                    data = data.split(";")
+                    if data[0] == "getRoom":
+                        data = ""
+                        for player in self.players:
+                            data += player.name + "\n"
+                        sock.sendall(data[:-1])
+                    if data[0] == "leave":
+                        sock.sendall("ack")
+                        players[sock] = player
+                        self.players.remove(player)
+                        if len(self) == 0:
+                            rooms.remove(self)
+                        else:
+                            data = ""
+                            for player in self.players:
+                                data += player.name + "\n"
+                            self.players[0].socket.send(data[:-1])
+                        map(lambda sock: sock.sendall("new;"), players.keys())
+            except:
+                print player, "disconnected"
+                self.players.remove(player)
+                if len(self) == 0:
+                    rooms.remove(self)
+                for i in xrange(gui.playersListbox.size()):
+                    if gui.playersListbox.get(i) == player.name:
+                        gui.playersListbox.delete(i)
+                        break
+                names.remove(player.name)
+                sock.close()
+                map(lambda sock: sock.sendall("new;"), players.keys())
+
 
     def __len__(self):
         return len(self.players)
@@ -81,7 +137,9 @@ class Room(object):
         return self.players[item]
 
     def __repr__(self):
-        return self.name + ";" + self.players[0].name + ";" + str(self.password != None)
+        if len(self.players) == 2:
+            return self.name+";"+self.players[0].name+","+self.players[1].name+";"+str(self.password != "")
+        return self.name+";"+self.players[0].name+";"+str(self.password != "")
 
 
 def present_board(ships, guesses, offset):
@@ -151,7 +209,6 @@ def turn(shooter, watcher, guesses, board, ships):
 def game(players, playersListbox, gamesListBox, games):
     gameID = players[0].name + " vs " + players[1].name
     gamesListBox.insert(Tkinter.END, gameID)
-    print "Game: " + gameID
     games[gameID] = {}
     game = games[gameID]
 
@@ -263,32 +320,72 @@ def chat():
     names = {}
 
     while online:
-        rlist, wlist, xlist = select.select([chat_server] + open_client_sockets, [], [], 0)
-        for current_socket in rlist:
-            if current_socket is chat_server:
-                newSock, addr = chat_server.accept()
-                open_client_sockets.append(newSock)
-                names[newSock] = newSock.recv(1024)
-            else:
-                data = current_socket.recv(1024)
-                if data == "":
-                    names.pop(current_socket)
-                    open_client_sockets.remove(current_socket)
+        try:
+            rlist, wlist, xlist = select.select([chat_server] + open_client_sockets, [], [], 0)
+            for current_socket in rlist:
+                if current_socket is chat_server:
+                    newSock, addr = chat_server.accept()
+                    open_client_sockets.append(newSock)
+                    names[newSock] = newSock.recv(1024)
                 else:
-                    for client in open_client_sockets:
-                        client.send(names[current_socket] + ": " + data)
+                    data = current_socket.recv(1024)
+                    if data == "":
+                        names.pop(current_socket)
+                        open_client_sockets.remove(current_socket)
+                    else:
+                        for client in open_client_sockets:
+                            client.send(names[current_socket] + ": " + data)
+        except:
+            names.pop(current_socket)
+            open_client_sockets.remove(current_socket)
     chat_server.close()
 
 
 def lobby_data(rooms, games):
     ret = ""
-    for room in rooms:
-        if not room.hidden:
-            ret += repr(room) + "\n"
-    ret += "\n"
+    if len(rooms) == 0:
+        ret = "empty@"
+    else:
+        for room in rooms:
+            if not room.hidden:
+                ret += repr(room) + "\n"
+        ret = ret[:-1] + "@"
+    if len(games) == 0:
+        return ret+"empty"
     for game in games.keys():
         ret += game + "\n"
-    return ret[:-1]
+    ret = ret[:-1]
+    return ret
+
+
+def maintain_gui(gui):
+    screen.blit(background, (0, 0))
+    screen.blit(visualBoard, (45, 150))
+    screen.blit(visualBoard, (555, 150))
+    if gui.curr_game:
+        pygame.display.set_caption(gui.curr_game)
+        names = gui.curr_game.split(" vs ")
+        try:
+            label(str((12 - len(names[0])) * " " + "{}'s board" + (12 - len(names[0])) * " ").format(names[0]), 20,
+                  (110, 110))
+            label(str((12 - len(names[1])) * " " + "{}'s board" + (12 - len(names[1])) * " ").format(names[1]), 20,
+                  (650, 110))
+            present_board(games[gui.curr_game]['ships'][0], games[gui.curr_game]['guesses'][1], (47, 152))
+            present_board(games[gui.curr_game]['ships'][1], games[gui.curr_game]['guesses'][0], (557, 152))
+            text = "{}'s Turn".format(games[gui.curr_game]['shooter'])
+            label((40 - len(text)) / 2 * " " + text + (40 - len(text)) / 2 * " ", 48, (190, 50))
+        except:
+            try:
+                present_board(games[gui.curr_game]['ships'][1], games[gui.curr_game]['guesses'][0], (557, 152))
+            except:
+                pass
+            label("Players placing ships", 48, (220, 45))
+    else:
+        pygame.display.set_caption("Battleships")
+        label("Choose a game in the", 32, (315, 45))
+        label("games menu to watch it", 32, (300, 75))
+    pygame.display.update()
+    gui.update()
 
 
 server_socket = socket.socket()
@@ -319,31 +416,7 @@ online = True
 thread.start_new_thread(identify, tuple())
 thread.start_new_thread(chat, tuple())
 while online:
-    screen.blit(background, (0, 0))
-    screen.blit(visualBoard, (45, 150))
-    screen.blit(visualBoard, (555, 150))
-    if gui.curr_game:
-        pygame.display.set_caption(gui.curr_game)
-        names = gui.curr_game.split(" vs ")
-        try:
-            label(str((12 - len(names[0])) * " " + "{}'s board" + (12 - len(names[0])) * " ").format(names[0]), 20, (110, 110))
-            label(str((12 - len(names[1])) * " " + "{}'s board" + (12 - len(names[1])) * " ").format(names[1]), 20, (650, 110))
-            present_board(games[gui.curr_game]['ships'][0], games[gui.curr_game]['guesses'][1], (47, 152))
-            present_board(games[gui.curr_game]['ships'][1], games[gui.curr_game]['guesses'][0], (557, 152))
-            text = "{}'s Turn".format(games[gui.curr_game]['shooter'])
-            label((40 - len(text)) / 2 * " " + text + (40 - len(text)) / 2 * " ", 48, (190, 50))
-        except:
-            try:
-                present_board(games[gui.curr_game]['ships'][1], games[gui.curr_game]['guesses'][0], (557, 152))
-            except:
-                pass
-            label("Players placing ships", 48, (220, 45))
-    else:
-        pygame.display.set_caption("Battleships")
-        label("Choose a game in the", 32, (315, 45))
-        label("games menu to watch it", 32, (300, 75))
-    pygame.display.update()
-    gui.update()
+    maintain_gui(gui)
     rlist, wlist, xlist = select.select([server_socket] + players.keys(), [], [], 0)
     for sock in rlist:
         if sock == server_socket:
@@ -353,28 +426,54 @@ while online:
             gui.playersListbox.insert(Tkinter.END, names[-1])
             players[newSock] = Player(newSock, addr, names[-1])
             print names[-1], "connected from", str(addr)
-            newSock.send(lobby_data(rooms, games))
         else:
-            data = sock.recv(1024)
-            if data == "":
+            try:
+                data = sock.recv(1024)
+                if data == "":
+                    print players[sock], "disconnected"
+                    for i in xrange(gui.playersListbox.size()):
+                        if gui.playersListbox.get(i) == players[sock].name:
+                            gui.playersListbox.delete(i)
+                            break
+                    names.remove(players[sock].name)
+                    players.pop(sock)
+                    sock.close()
+                    map(lambda sock: sock.sendall("new;"), players.keys())
+                else:
+                    data = data.split(";")
+                    if data[0] == "get":
+                        sock.sendall(lobby_data(rooms, games))
+                    elif data[0] == "new":
+                        sock.sendall("ack")
+                        rooms.append(Room(data[1], players[sock], False, data[2]))
+                        players.pop(sock)
+                        map(lambda sock: sock.sendall("new;"), players.keys())
+                    elif data[0] == "join":
+                        if rooms[int(data[1])].password == "":
+                            sock.sendall("ack")
+                            rooms[int(data[1])].players.append(players[sock])
+                            players.pop(sock)
+                            rooms[int(data[1])].players[0].socket.sendall(rooms[int(data[1])].players[0].name + "\n" + rooms[int(data[1])].players[1].name)
+                            map(lambda sock: sock.sendall("new;"), players.keys())
+                        elif data[2] == rooms[int(data[1])].password:
+                            sock.sendall("True")
+                            rooms[int(data[1])].players.append(players[sock])
+                            players.pop(sock)
+                            rooms[int(data[1])].players[0].socket.sendall(rooms[int(data[1])].players[0].name + "\n" + rooms[int(data[1])].players[1].name)
+                            map(lambda sock: sock.sendall("new;"), players.keys())
+                        else:
+                            sock.sendall("False")
+            except:
                 print players[sock], "disconnected"
                 for i in xrange(gui.playersListbox.size()):
                     if gui.playersListbox.get(i) == players[sock].name:
                         gui.playersListbox.delete(i)
                         break
-                for room in rooms:
-                    for player in room:
-                        if player.socket == sock:
-                            room.remove(player)
                 names.remove(players[sock].name)
                 players.pop(sock)
                 sock.close()
-    for room in rooms:
-        if len(room) == 2:
-            players.pop(room[0].socket)
-            players.pop(room[1].socket)
-            thread.start_new_thread(game, (room.players, gui.playersListbox, gui.gamesListbox, games))
-            rooms.remove(room)
+                map(lambda sock: sock.sendall("new;"), players.keys())
+    map(Room.update, rooms)
 
 server_socket.close()
 pygame.quit()
