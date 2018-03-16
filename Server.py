@@ -73,6 +73,7 @@ class Room(object):
         self.password = password
         self.players = [player]
         self.hidden = hidden
+        self.ready = 0
 
     def update(self):
         sockets = []
@@ -99,12 +100,18 @@ class Room(object):
                     map(lambda sock: sock.sendall("new;"), players.keys())
                 else:
                     data = data.split(";")
+                    if data[0] == "ready":
+                        self.ready += 1
+                        if self.ready == 2:
+                            thread.start_new_thread(game, (self.players, gui.playersListbox, gui.gamesListbox, games))
+                            rooms.remove(self)
                     if data[0] == "getRoom":
                         data = ""
                         for player in self.players:
                             data += player.name + "\n"
                         sock.sendall(data[:-1])
                     if data[0] == "leave":
+                        self.ready = 0
                         sock.sendall("ack")
                         players[sock] = player
                         self.players.remove(player)
@@ -116,7 +123,9 @@ class Room(object):
                                 data += player.name + "\n"
                             self.players[0].socket.send(data[:-1])
                         map(lambda sock: sock.sendall("new;"), players.keys())
-            except:
+            except Exception as ex:
+                print repr(ex)
+                self.ready = 0
                 print player, "disconnected"
                 self.players.remove(player)
                 if len(self) == 0:
@@ -165,7 +174,17 @@ def turn(shooter, watcher, guesses, board, ships):
     shooter.sendall("shoot")
     watcher.sendall("watch")
 
-    coords = pickle.loads(shooter.recv(1024))
+    wait = True
+    while wait:
+        rlist, wlist, xlist = select.select([shooter, watcher], [], [], 0)
+        for sock in rlist:
+            data = sock.recv(1024)
+            if data == "":
+                raise Exception
+            else:
+                wait = False
+
+    coords = pickle.loads(data)
 
     if board[coords[1]][coords[0]] == "":
         guesses[coords[1]][coords[0]] = "miss"
@@ -227,10 +246,13 @@ def game(players, playersListbox, gamesListBox, games):
         while game['ships'][0] == None or game['ships'][1] == None:
             rlist, wlist, xlist = select.select([players[0].socket, players[1].socket], [], [], 0)
             for sock in rlist:
+                data = sock.recv(1024)
+                if data == "":
+                    raise Exception
                 if sock == players[0].socket:
-                    game['ships'][0] = pickle.loads(players[0].socket.recv(1024))
+                    game['ships'][0] = pickle.loads(data)
                 else:
-                    game['ships'][1] = pickle.loads(players[1].socket.recv(1024))
+                    game['ships'][1] = pickle.loads(data)
 
         players[0].socket.sendall("start")
         players[1].socket.sendall("start")
@@ -256,19 +278,27 @@ def game(players, playersListbox, gamesListBox, games):
         globals()["players"][players[0].socket] = players[0]
         globals()["players"][players[1].socket] = players[1]
     except:
-        players[0].socket.shutdown(socket.SHUT_RDWR)
-        players[1].socket.shutdown(socket.SHUT_RDWR)
-        for i in xrange(playersListbox.size()):
-            if playersListbox.get(i) == players[0].name:
-                playersListbox.delete(i)
-        for i in xrange(playersListbox.size()):
-            if playersListbox.get(i) == players[1].name:
-                playersListbox.delete(i)
-        print players[0], "disconnected"
-        print players[0], "disconnected"
         global names
-        names.remove(players[0].name)
-        names.remove(players[1].name)
+        try:
+            players[0].socket.send("disconnect;")
+            players[0].socket.recv(1024)
+            globals()['players'][players[0].socket] = players[0]
+        except:
+            for i in xrange(playersListbox.size()):
+                if playersListbox.get(i) == players[0].name:
+                    playersListbox.delete(i)
+            print players[0], "disconnected"
+            names.remove(players[0].name)
+        try:
+            players[1].socket.sendall("disconnect;")
+            players[1].socket.recv(1024)
+            globals()['players'][players[1].socket] = players[1]
+        except:
+            for i in xrange(playersListbox.size()):
+                if playersListbox.get(i) == players[1].name:
+                    playersListbox.delete(i)
+            print players[1], "disconnected"
+            names.remove(players[1].name)
     finally:
         for i in xrange(gamesListBox.size()):
             if gamesListBox.get(i) == gameID:
@@ -300,7 +330,7 @@ def label(text, size, pos, color=(255, 255, 255)):
 def identify():
     udp_server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
-    udp_server.bind(("0.0.0.0", 1234))
+    udp_server.bind(("0.0.0.0", 12346))
     udp_server.setblocking(False)
     while online:
         try:
@@ -314,11 +344,10 @@ def identify():
 
 def chat():
     chat_server = socket.socket()
-    chat_server.bind(('0.0.0.0', 123))
+    chat_server.bind(('0.0.0.0', 12347))
     chat_server.listen(5)
     open_client_sockets = []
     names = {}
-
     while online:
         try:
             rlist, wlist, xlist = select.select([chat_server] + open_client_sockets, [], [], 0)
@@ -328,13 +357,13 @@ def chat():
                     open_client_sockets.append(newSock)
                     names[newSock] = newSock.recv(1024)
                 else:
-                    data = current_socket.recv(1024)
+                    data = current_socket.recv(1024).decode("utf-8")
                     if data == "":
                         names.pop(current_socket)
                         open_client_sockets.remove(current_socket)
                     else:
                         for client in open_client_sockets:
-                            client.send(names[current_socket] + ": " + data)
+                            client.send((names[current_socket] + ": " + data).encode("utf-8"))
         except:
             names.pop(current_socket)
             open_client_sockets.remove(current_socket)

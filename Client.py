@@ -103,7 +103,7 @@ class ConnectionMenu(Tkinter.Tk):
             if self.name.get() == "":
                 tkMessageBox.showerror("Error", "Insert name please")
             else:
-                client_socket[0] = (socket.create_connection((self.ip.get(), int(self.port.get()))))
+                client_socket[0] = socket.create_connection((self.ip.get(), int(self.port.get())))
                 connected[0] = True
                 client_socket[0].send(self.name.get())
                 self.name.set(client_socket[0].recv(1024))
@@ -135,8 +135,10 @@ class LobbyApp(Tkinter.Tk):
         self.room = ""
 
     def mainloop(self):
-        lobby = True
-        while lobby and self.state() != "withdrawn":
+        self.up = True
+        self.deiconify()
+        self.lobbies.set_lobby()
+        while self.up and self.state() != "withdrawn":
             self.update()
             self.chat.update()
             self.lobbies.update()
@@ -144,7 +146,18 @@ class LobbyApp(Tkinter.Tk):
             for sock in rlist:
                 data = sock.recv(1024)
                 if data == "start":
-                    lobby = False
+                    self.up = False
+                elif self.room == "":
+                    if data.split(";")[0] == "new":
+                        self.lobbies.set_lobby()
+                else:
+                    self.lobbies.room_connected.set("Connected:\n" + data)
+                    self.lobbies.ready.place(x=self.lobbies.ready.x, y=self.lobbies.ready.y)
+                    if len(data.split("\n")) == 2:
+                        self.lobbies.ready.config(state=Tkinter.NORMAL)
+                    else:
+                        self.lobbies.ready.config(state=Tkinter.DISABLED)
+                self.lift()
         if self.state() == "withdrawn":
             self.client_socket.close()
             self.chat.close()
@@ -159,7 +172,8 @@ class Lobby(Tkinter.Frame):
         self.client_socket = client_socket
         self.width = width
         self.height = height
-        self.set_lobby()
+        self.room_connected = Tkinter.StringVar(self)
+        self.room_connected.set("Connected:\n")
 
     def clear(self):
         for widget in self.winfo_children():
@@ -250,8 +264,6 @@ class Lobby(Tkinter.Frame):
 
     def set_room(self):
         self.clear()
-        self.room_connected = Tkinter.StringVar(self)
-        self.room_connected.set("Connected:\n")
         title = Tkinter.Label(self, text=self.master.room, font="Ariel 24 bold")
         title.place(x=self.width/2)
         self.master.update()
@@ -264,11 +276,17 @@ class Lobby(Tkinter.Frame):
         leave.place(y=title.winfo_height()+connected.winfo_height()+100)
         self.master.update()
         leave.place(x=self.width/2-leave.winfo_width()/2, y=title.winfo_height()+connected.winfo_height()+100)
-        self.ready = Tkinter.Button(self, text="Ready", command=self.leave, state=Tkinter.DISABLED)
+        self.ready = Tkinter.Button(self, text="Ready", command=self.ready_click, state=Tkinter.DISABLED)
         self.ready.place(y=title.winfo_height() + connected.winfo_height() + 100)
         self.master.update()
-        self.ready.place(x=self.width/2-self.ready.winfo_width()/2, y=title.winfo_height()+connected.winfo_height()+100+leave.winfo_height())
+        self.ready.x = self.width/2-self.ready.winfo_width()/2
+        self.ready.y = title.winfo_height()+connected.winfo_height()+100+leave.winfo_height()
+        self.ready.place(x=self.ready.x, y=self.ready.y)
         self.client_socket.sendall("getRoom;")
+
+    def ready_click(self):
+        self.client_socket.sendall("ready;")
+        self.ready.place_forget()
 
     def join(self):
         if len(self.rooms_names.curselection()) > 0:
@@ -348,26 +366,13 @@ class Lobby(Tkinter.Frame):
                 self.rooms_names.select_set(num)
                 self.rooms_players.select_set(num)
                 self.rooms_password.select_set(num)
-        rlist, wlist, xlist = select.select([self.client_socket], [], [], 0)
-        for sock in rlist:
-            self.master.lift()
-            data = sock.recv(1024)
-            if self.master.room == "":
-                if data.split(";")[0] == "new":
-                    self.set_lobby()
-            else:
-                self.room_connected.set("Connected:\n"+data)
-                if len(data.split("\n")) == 2:
-                    self.ready.config(state=Tkinter.NORMAL)
-                else:
-                    self.ready.config(state=Tkinter.DISABLED)
 
 
 class Chat(Tkinter.Frame):
     def __init__(self, master, height, width):
         Tkinter.Frame.__init__(self, master, height=height, width=width, name="chat")
         self.master = master
-        self.chat_socket = socket.create_connection((connection_menu.ip.get(), 123))
+        self.chat_socket = socket.create_connection((connection_menu.ip.get(), 12347))
         self.chat_socket.send(connection_menu.name.get())
         self.message_scroll = Tkinter.Scrollbar(self)
         self.messages = Tkinter.Listbox(self, yscrollcommand=self.message_scroll.set)
@@ -390,13 +395,13 @@ class Chat(Tkinter.Frame):
 
     def send(self, event=None):
         if self.message.get().replace(" ", "") != "":
-            self.chat_socket.send(self.message.get())
+            self.chat_socket.send(self.message.get().encode("utf-8"))
         self.message.set("")
 
     def update(self):
         rlist, wlist, xlist = select.select([self.chat_socket], [], [], 0)
         for current_socket in rlist:
-            data = current_socket.recv(1024)
+            data = current_socket.recv(1024).decode("utf-8")
             if data == "":
                 tkMessageBox.showerror("Disconnect", "Disconnected from server")
                 self.master.withdraw()
@@ -443,13 +448,13 @@ def mini_game(client_socket):
         rlist, wlist, xlist = select.select([client_socket], [], [], 0)
         for sock in rlist:
             data = sock.recv(1024)
-            if data == "":
-                raise Exception("Disconnected")
+            if data == "disconnect;":
+                raise Exception
             elif data == "start":
                 return
 
 
-def create_board():
+def create_board(client_socket):
     pygame.display.set_caption("Create Your Board")
     background = pygame.image.load("img/Create.png")
     submit = Button(screen, (30, 60, 200), 80, 444, 160, 75,  "Submit", (255, 255, 255), (30, 60, 100))
@@ -464,6 +469,10 @@ def create_board():
 
     finish = False
     while not finish:
+        rlist, wlist, xlist = select.select([client_socket], [], [], 0)
+        for sock in rlist:
+            if sock.recv(1024) == "disconnect;":
+                raise Exception
         screen.blit(background, (0, 0))
         label("Place your battleships", 48, (240, 55))
         submit.draw()
@@ -574,6 +583,10 @@ def shoot(ships, board, guesses, client_socket, opName):
     pygame.display.update()
 
     while True:
+        rlist, wlist, xlist = select.select([client_socket], [], [], 0)
+        for sock in rlist:
+            if sock.recv(1024) == "disconnect;":
+                raise Exception
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 raise Exception("Close")
@@ -635,11 +648,10 @@ def game(client_socket):
     pygame.init()
     screen = pygame.display.set_mode((960, 540))
     try:
-        board, ships = create_board()
+        board, ships = create_board(client_socket)
         temp = []
         map(lambda ship: temp.append((ship.place, ship.horizontal, ship.width)), ships)
         client_socket.sendall(pickle.dumps(temp))
-
         mini_game(client_socket)
 
         client_socket.sendall(pickle.dumps(board))
@@ -650,18 +662,26 @@ def game(client_socket):
                 guesses[-1].append("")
 
         opName = client_socket.recv(1024)
+        if opName == "disconnect;":
+            raise Exception
         client_socket.sendall("got name")
 
         finish = False
         while not finish:
             role = client_socket.recv(1024)
-            if role == "shoot":
+            if role == "disconnect;":
+                raise Exception
+            elif role == "shoot":
                 shoot(ships, board, guesses, client_socket, opName)
 
                 guesses = pickle.loads(client_socket.recv(1024))
+                if guesses == "disconnect;":
+                    raise Exception
                 client_socket.sendall("updated")
 
                 state = "s" + client_socket.recv(1024)
+                if state == "sdisconnect;":
+                    raise Exception
             elif role == "watch":
                 watch(ships, board, guesses, client_socket, opName)
 
@@ -669,6 +689,8 @@ def game(client_socket):
                 client_socket.sendall("updated")
 
                 state = "w" + client_socket.recv(1024)
+                if state == "disconnect;":
+                    raise Exception
             if state[1:] == "win":
                 present_board(ships, board, guesses, opName, pickle.loads(client_socket.recv(1024)))
                 show_state(state)
@@ -688,14 +710,14 @@ def game(client_socket):
                 pygame.display.update()
                 client_socket.sendall("ready")
                 watch(ships, board, guesses, client_socket, opName, state)
-        return True
     except Exception as ex:
         print repr(ex)
         if ex.message == ("Close"):
             client_socket.close()
             quit()
+        client_socket.sendall("no!")
         tkMessageBox.showerror("Disconnected", "Your opponent has disconnected")
-        return False
+    pygame.quit()
 
 
 def rules():
@@ -740,7 +762,8 @@ try:
     tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, True)
     tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
     tempSock.settimeout(1)
-    tempSock.sendto("battleships?", ("255.255.255.255", 1234))
+    tempSock.sendto("battleships?", ("255.255.255.255", 12346))
+    tempSock.sendto("battleships?", ("37.142.182.218", 12346))
     try:
         data = tempSock.recvfrom(1024)
         if data[0] == "indeed":
@@ -754,14 +777,11 @@ try:
         connection_menu.limit()
         connection_menu.update()
     connection_menu.withdraw()
-
     if connected[0]:
-        LobbyApp(client_socket[0]).mainloop()
-        if not game(client_socket[0]):
-            connection_menu.connect()
-
-    if connected[0]:
-        client_socket[0].close()
+        lobby_gui = LobbyApp(client_socket[0])
+    while connected[0]:
+        lobby_gui.mainloop()
+        lobby_gui.room = ""
+        game(client_socket[0])
 except Exception as ex:
-    client_socket[0].close()
-    raise ex
+    print repr(ex)
