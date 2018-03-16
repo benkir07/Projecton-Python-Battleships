@@ -720,28 +720,6 @@ def game(client_socket):
     pygame.quit()
 
 
-def rules():
-    page = 0
-    back = Button(screen, (30, 60, 200), 225, 400, 500, 70, "Back to main menu", (255, 255, 255), (30, 60, 100), 40)
-    finish = False
-    while not finish:
-        screen.blit(RULES[page], (0, 0))
-        if page == 2:
-            back.draw()
-        pygame.display.update()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                finish = True
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if pygame.Surface.get_at(screen, event.pos) == (91, 155, 213):
-                    if event.pos[0] > 888:
-                        page += 1
-                    if event.pos[0] < 70:
-                        page -= 1
-        if back.pressed():
-            finish = True
-
-
 #constants
 slotwidth = 36
 visualBoard = pygame.Surface((slotwidth*10 ,slotwidth*10))
@@ -749,7 +727,6 @@ for y in xrange(0, slotwidth*10, slotwidth):
     for x in xrange(0, slotwidth*10, slotwidth):
         pygame.draw.rect(visualBoard, (30, 60, 200), pygame.Rect(x, y, slotwidth, slotwidth))
         pygame.draw.rect(visualBoard, (255, 255, 255), pygame.Rect(x, y, slotwidth, slotwidth), 1)
-RULES = (pygame.image.load("img/Rules1.png"), pygame.image.load("img/Rules2.png"), pygame.image.load("img/Rules3.png"))
 EXPLOSION_IMAGES = (pygame.image.load("img/blowup1.png"), pygame.image.load("img/blowup2.png"), pygame.image.load("img/blowup3.png"), pygame.image.load("img/blowup4.png"), pygame.image.load("img/blowup5.png"), pygame.image.load("img/blowup6.png"))
 signs = (pygame.image.load("img/Hit.png"), pygame.image.load("img/Miss.png"))
 #
