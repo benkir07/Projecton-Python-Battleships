@@ -226,87 +226,90 @@ def turn(shooter, watcher, guesses, board, ships):
 
 
 def game(players, playersListbox, gamesListBox, games):
-    gameID = players[0].name + " vs " + players[1].name
-    gamesListBox.insert(Tkinter.END, gameID)
-    games[gameID] = {}
-    game = games[gameID]
-
-    map(lambda sock: sock.sendall("new;"), globals()['players'].keys())
-
-    game['guesses'] = [[], []]
-    for x in xrange(10):
-        game['guesses'][0].append([])
-        game['guesses'][1].append([])
-        for y in xrange(10):
-            game['guesses'][0][-1].append("")
-            game['guesses'][1][-1].append("")
     try:
-        players[0].socket.sendall("start")
-        players[1].socket.sendall("start")
+        gameID = players[0].name + " vs " + players[1].name
+        gamesListBox.insert(Tkinter.END, gameID)
+        games[gameID] = {}
+        game = games[gameID]
 
-        game['ships'] = [None, None]
-        while game['ships'][0] == None or game['ships'][1] == None:
-            rlist, wlist, xlist = select.select([players[0].socket, players[1].socket], [], [], 0)
-            for sock in rlist:
-                data = sock.recv(1024)
-                if data == "":
-                    raise Exception
-                if sock == players[0].socket:
-                    game['ships'][0] = pickle.loads(data)
-                else:
-                    game['ships'][1] = pickle.loads(data)
-
-        players[0].socket.sendall("start")
-        players[1].socket.sendall("start")
-
-        boards = [pickle.loads(players[0].socket.recv(1024)), pickle.loads(players[1].socket.recv(1024))]
-
-        players[0].socket.sendall(players[1].name)
-        players[1].socket.sendall(players[0].name)
-
-        if players[0].socket.recv(1024) == "got name" and players[1].socket.recv(1024) == "got name":
-            pass
-
-        finish = False
-
-        shooter = randint(0, 1)
-        while not finish:
-            game['shooter'] = players[shooter].name
-            finish = turn(players[shooter].socket, players[1-shooter].socket, game['guesses'][shooter], boards[1-shooter], game['ships'][1-shooter])
-            shooter = 1 - shooter
-        players[0].socket.sendall(pickle.dumps(game['ships'][1]))
-        players[1].socket.sendall(pickle.dumps(game['ships'][0]))
-
-        globals()["players"][players[0].socket] = players[0]
-        globals()["players"][players[1].socket] = players[1]
-    except:
-        global names
-        try:
-            players[0].socket.send("disconnect;")
-            players[0].socket.recv(1024)
-            globals()['players'][players[0].socket] = players[0]
-        except:
-            for i in xrange(playersListbox.size()):
-                if playersListbox.get(i) == players[0].name:
-                    playersListbox.delete(i)
-            print players[0], "disconnected"
-            names.remove(players[0].name)
-        try:
-            players[1].socket.sendall("disconnect;")
-            players[1].socket.recv(1024)
-            globals()['players'][players[1].socket] = players[1]
-        except:
-            for i in xrange(playersListbox.size()):
-                if playersListbox.get(i) == players[1].name:
-                    playersListbox.delete(i)
-            print players[1], "disconnected"
-            names.remove(players[1].name)
-    finally:
-        for i in xrange(gamesListBox.size()):
-            if gamesListBox.get(i) == gameID:
-                gamesListBox.delete(i)
-        games.pop(gameID)
         map(lambda sock: sock.sendall("new;"), globals()['players'].keys())
+
+        game['guesses'] = [[], []]
+        for x in xrange(10):
+            game['guesses'][0].append([])
+            game['guesses'][1].append([])
+            for y in xrange(10):
+                game['guesses'][0][-1].append("")
+                game['guesses'][1][-1].append("")
+        try:
+            players[0].socket.sendall("start")
+            players[1].socket.sendall("start")
+
+            game['ships'] = [None, None]
+            while game['ships'][0] == None or game['ships'][1] == None:
+                rlist, wlist, xlist = select.select([players[0].socket, players[1].socket], [], [], 0)
+                for sock in rlist:
+                    data = sock.recv(1024)
+                    if data == "":
+                        raise Exception
+                    if sock == players[0].socket:
+                        game['ships'][0] = pickle.loads(data)
+                    else:
+                        game['ships'][1] = pickle.loads(data)
+
+            players[0].socket.sendall("start")
+            players[1].socket.sendall("start")
+
+            boards = [pickle.loads(players[0].socket.recv(1024)), pickle.loads(players[1].socket.recv(1024))]
+
+            players[0].socket.sendall(players[1].name)
+            players[1].socket.sendall(players[0].name)
+
+            if players[0].socket.recv(1024) == "got name" and players[1].socket.recv(1024) == "got name":
+                pass
+
+            finish = False
+
+            shooter = randint(0, 1)
+            while not finish:
+                game['shooter'] = players[shooter].name
+                finish = turn(players[shooter].socket, players[1-shooter].socket, game['guesses'][shooter], boards[1-shooter], game['ships'][1-shooter])
+                shooter = 1 - shooter
+            players[0].socket.sendall(pickle.dumps(game['ships'][1]))
+            players[1].socket.sendall(pickle.dumps(game['ships'][0]))
+
+            globals()["players"][players[0].socket] = players[0]
+            globals()["players"][players[1].socket] = players[1]
+        except:
+            global names
+            try:
+                players[0].socket.send("disconnect;")
+                players[0].socket.recv(1024)
+                globals()['players'][players[0].socket] = players[0]
+            except:
+                for i in xrange(playersListbox.size()):
+                    if playersListbox.get(i) == players[0].name:
+                        playersListbox.delete(i)
+                print players[0], "disconnected"
+                names.remove(players[0].name)
+            try:
+                players[1].socket.sendall("disconnect;")
+                players[1].socket.recv(1024)
+                globals()['players'][players[1].socket] = players[1]
+            except:
+                for i in xrange(playersListbox.size()):
+                    if playersListbox.get(i) == players[1].name:
+                        playersListbox.delete(i)
+                print players[1], "disconnected"
+                names.remove(players[1].name)
+        finally:
+            for i in xrange(gamesListBox.size()):
+                if gamesListBox.get(i) == gameID:
+                    gamesListBox.delete(i)
+            games.pop(gameID)
+            map(lambda sock: sock.sendall("new;"), globals()['players'].keys())
+    except:
+        pass
 
 
 def insert_name(name, names):
@@ -399,24 +402,27 @@ def maintain_gui(gui):
         screen.blit(background, (0, 0))
         screen.blit(visualBoard, (45, 150))
         screen.blit(visualBoard, (555, 150))
-        pygame.display.set_caption(gui.curr_game)
-        names = gui.curr_game.split(" vs ")
         try:
-            label(str((12 - len(names[0])) * " " + "{}'s board" + (12 - len(names[0])) * " ").format(names[0]), 20,
-                  (110, 110))
-            label(str((12 - len(names[1])) * " " + "{}'s board" + (12 - len(names[1])) * " ").format(names[1]), 20,
-                  (650, 110))
-            present_board(games[gui.curr_game]['ships'][0], games[gui.curr_game]['guesses'][1], (47, 152))
-            present_board(games[gui.curr_game]['ships'][1], games[gui.curr_game]['guesses'][0], (557, 152))
-            text = "{}'s Turn".format(games[gui.curr_game]['shooter'])
-            label((40 - len(text)) / 2 * " " + text + (40 - len(text)) / 2 * " ", 48, (190, 50))
-        except:
+            pygame.display.set_caption(gui.curr_game)
+            names = gui.curr_game.split(" vs ")
             try:
+                label(str((12 - len(names[0])) * " " + "{}'s board" + (12 - len(names[0])) * " ").format(names[0]), 20,
+                      (110, 110))
+                label(str((12 - len(names[1])) * " " + "{}'s board" + (12 - len(names[1])) * " ").format(names[1]), 20,
+                      (650, 110))
+                present_board(games[gui.curr_game]['ships'][0], games[gui.curr_game]['guesses'][1], (47, 152))
                 present_board(games[gui.curr_game]['ships'][1], games[gui.curr_game]['guesses'][0], (557, 152))
+                text = "{}'s Turn".format(games[gui.curr_game]['shooter'])
+                label((40 - len(text)) / 2 * " " + text + (40 - len(text)) / 2 * " ", 48, (190, 50))
             except:
-                pass
-            label("Players placing ships", 48, (220, 45))
-        pygame.display.update()
+                try:
+                    present_board(games[gui.curr_game]['ships'][1], games[gui.curr_game]['guesses'][0], (557, 152))
+                except:
+                    pass
+                label("Players placing ships", 48, (220, 45))
+            pygame.display.update()
+        except:
+            pygame.quit()
     else:
         pygame.quit()
     gui.update()
