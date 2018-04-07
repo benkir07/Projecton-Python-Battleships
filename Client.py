@@ -100,16 +100,20 @@ class ConnectionMenu(Tkinter.Tk):
 
     def connect(self):
         try:
-            if self.name.get() == "":
-                tkMessageBox.showerror("Error", "Insert name please")
-            else:
-                client_socket[0] = socket.create_connection((self.ip.get(), int(self.port.get())))
-                connected[0] = True
-                client_socket[0].send(self.name.get())
-                self.name.set(client_socket[0].recv(1024))
-        except Exception as ex:
-            print repr(ex)
-            tkMessageBox.showerror("Error", "Could not connect")
+            self.name.get().decode("ascii")
+            try:
+                if self.name.get() == "":
+                    tkMessageBox.showerror("Error", "Insert name please")
+                else:
+                    client_socket[0] = socket.create_connection((self.ip.get(), int(self.port.get())))
+                    connected[0] = True
+                    client_socket[0].send(self.name.get())
+                    self.name.set(client_socket[0].recv(1024))
+            except Exception as ex:
+                print repr(ex)
+                tkMessageBox.showerror("Error", "Could not connect")
+        except:
+            tkMessageBox.showerror("Error", "Username can be only letters and numbers")
 
     def limit(self):
         self.ip.set(self.ip.get()[:15])
@@ -298,12 +302,12 @@ class Lobby(Tkinter.Frame):
                     self.temp_gui.resizable(0, 0)
                     self.temp_gui.title("New Room")
                     self.temp_gui.protocol("WM_DELETE_WINDOW", self.temp_gui.withdraw)
-                    password = Tkinter.StringVar(self.temp_gui)
+                    self.password = Tkinter.StringVar(self.temp_gui)
                     Tkinter.Entry(self.temp_gui, text=self.rooms_names.get(room)+":")
                     Tkinter.Label(self.temp_gui, text="Password:").pack()
-                    pass_entry = Tkinter.Entry(self.temp_gui, textvariable=password, show="•")
+                    pass_entry = Tkinter.Entry(self.temp_gui, textvariable=self.password, show="•")
                     pass_entry.pack()
-                    Tkinter.Button(self.temp_gui, text="Join", command=lambda: self.send_req(room, password.get())).pack()
+                    Tkinter.Button(self.temp_gui, text="Join", command=lambda: self.send_req(room)).pack()
                     self.temp_gui.update()
                     show = Tkinter.Button(self.temp_gui, text="Show")
                     show.bind("<Button-1>", lambda *args: pass_entry.config(show=""))
@@ -316,7 +320,7 @@ class Lobby(Tkinter.Frame):
                         rlist, wlist, xlist = select.select([self.client_socket], [], [], 0)
                         for sock in rlist:
                             sock.recv(1024)
-                        password.set(password.get()[:14])
+                            self.password.set(self.password.get()[:14])
                         self.temp_gui.update()
                     self.master.deiconify()
                     if self.master.room == "":
@@ -330,14 +334,16 @@ class Lobby(Tkinter.Frame):
             else:
                 tkMessageBox.showerror("Error", "Room full")
 
-    def send_req(self, room, password):
-        self.client_socket.sendall("join;"+room+";"+password)
+    def send_req(self, room):
+        self.client_socket.sendall("join;"+room+";"+self.password.get())
+        self.password.set("")
         data = self.client_socket.recv(1024)
         if data == "True":
             self.master.room = self.rooms_names.get(self.rooms_names.curselection()[0])
             self.temp_gui.withdraw()
             self.set_room()
         else:
+
             tkMessageBox.showerror("Error", "Wrong password")
 
     def leave(self):
@@ -406,9 +412,10 @@ class Chat(Tkinter.Frame):
                 tkMessageBox.showerror("Disconnect", "Disconnected from server")
                 self.master.withdraw()
             else:
-                self.messages.insert(Tkinter.END, data)
-                self.messages.select_set(Tkinter.END)
-                self.messages.yview(Tkinter.END)
+                for msg in data.split("\n")[:-1]:
+                    self.messages.insert(Tkinter.END, msg)
+                    self.messages.select_set(Tkinter.END)
+                    self.messages.yview(Tkinter.END)
         self.message.set(self.message.get()[:50])
         self.length.set(str(50 - len(self.message.get())) + "/50")
         self.messages.selection_clear(0, Tkinter.END)
@@ -756,6 +763,7 @@ try:
     connection_menu.withdraw()
     if connected[0]:
         lobby_gui = LobbyApp(client_socket[0])
+
     while connected[0]:
         lobby_gui.mainloop()
         lobby_gui.room = ""

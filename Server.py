@@ -231,6 +231,8 @@ def game(players, playersListbox, gamesListBox, games):
     games[gameID] = {}
     game = games[gameID]
 
+    map(lambda sock: sock.sendall("new;"), globals()['players'].keys())
+
     game['guesses'] = [[], []]
     for x in xrange(10):
         game['guesses'][0].append([])
@@ -304,6 +306,7 @@ def game(players, playersListbox, gamesListBox, games):
             if gamesListBox.get(i) == gameID:
                 gamesListBox.delete(i)
         games.pop(gameID)
+        map(lambda sock: sock.sendall("new;"), globals()['players'].keys())
 
 
 def insert_name(name, names):
@@ -363,7 +366,7 @@ def chat():
                         open_client_sockets.remove(current_socket)
                     else:
                         for client in open_client_sockets:
-                            client.send((names[current_socket] + ": " + data).encode("utf-8"))
+                            client.send((names[current_socket] + ": " + data + "\n").encode("utf-8"))
         except:
             names.pop(current_socket)
             open_client_sockets.remove(current_socket)
@@ -388,10 +391,14 @@ def lobby_data(rooms, games):
 
 
 def maintain_gui(gui):
-    screen.blit(background, (0, 0))
-    screen.blit(visualBoard, (45, 150))
-    screen.blit(visualBoard, (555, 150))
     if gui.curr_game:
+        global screen
+        pygame.init()
+        screen = pygame.display.set_mode((960, 540))
+
+        screen.blit(background, (0, 0))
+        screen.blit(visualBoard, (45, 150))
+        screen.blit(visualBoard, (555, 150))
         pygame.display.set_caption(gui.curr_game)
         names = gui.curr_game.split(" vs ")
         try:
@@ -409,11 +416,9 @@ def maintain_gui(gui):
             except:
                 pass
             label("Players placing ships", 48, (220, 45))
+        pygame.display.update()
     else:
-        pygame.display.set_caption("Battleships")
-        label("Choose a game in the", 32, (315, 45))
-        label("games menu to watch it", 32, (300, 75))
-    pygame.display.update()
+        pygame.quit()
     gui.update()
 
 
@@ -424,9 +429,6 @@ server_socket.listen(5)
 gui = ServerGUI()
 
 slotwidth = 36
-pygame.init()
-
-screen = pygame.display.set_mode((960, 540))
 background = pygame.image.load("img/Turn.png")
 signs = (pygame.image.load("img/Hit.png"), pygame.image.load("img/Miss.png"))
 
