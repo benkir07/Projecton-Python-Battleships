@@ -432,8 +432,8 @@ def label(text, size, pos, color=(255, 255, 255)):
 
 def mini_game(client_socket):
     pygame.display.set_caption("MiniGame")
-    background = pygame.image.load("img/MiniGame.png")
-    ship = pygame.image.load("img/MiniShip.png")
+    background = pygame.image.load("media/MiniGame.png")
+    ship = pygame.image.load("media/MiniShip.png")
     pos = (randint(95, 780), randint(150, 440))
     score = 0
 
@@ -463,7 +463,7 @@ def mini_game(client_socket):
 
 def create_board(client_socket):
     pygame.display.set_caption("Create Your Board")
-    background = pygame.image.load("img/Create.png")
+    background = pygame.image.load("media/Create.png")
     submit = Button(screen, (30, 60, 200), 80, 444, 160, 75,  "Submit", (255, 255, 255), (30, 60, 100))
     ships = [Battleship(0, screen, 125, 140, 2), Battleship(1, screen, 125-slotwidth/2, 190, 3), Battleship(2, screen, 125-slotwidth/2, 240, 3), Battleship(3, screen, 125-slotwidth, 290, 4), Battleship(4, screen, 125-slotwidth*1.5, 340, 5)]
     #ships = [ships[0]] #line for testing
@@ -543,7 +543,7 @@ def create_board(client_socket):
 
 
 def present_board(ships, board, guesses, opName, opShips = None):
-    screen.blit(pygame.image.load("img/Turn.png"), (0, 0))
+    screen.blit(pygame.image.load("media/Turn.png"), (0, 0))
     label("Your board", 20, (165, 110))
     label(str((12 - len(opName)) * " " + "{}'s board" + (12 - len(opName)) * " ").format(opName), 20, (650, 110))
     screen.blit(visualBoard, (45, 150))
@@ -648,6 +648,12 @@ def show_state(state):
             label("Ship is down!", 20, (405, 85))
         elif state[1:] == "win":
             label("Defeat!", 28, (410, 80))
+    if state[1:] != "":
+        if state[1:] == "miss":
+            pygame.mixer.music.load("media/splash.mp3")
+        else:
+            pygame.mixer.music.load("media/boom.mp3")
+        pygame.mixer.music.play(1, 0.0)
 
 
 def game(client_socket):
@@ -717,14 +723,15 @@ def game(client_socket):
                 pygame.display.update()
                 client_socket.sendall("ready")
                 watch(ships, board, guesses, client_socket, opName, state)
+        pygame.quit()
     except Exception as ex:
         print repr(ex)
         if ex.message == ("Close"):
             client_socket.close()
             quit()
         client_socket.sendall("no!")
+        pygame.quit()
         tkMessageBox.showerror("Disconnected", "Your opponent has disconnected")
-    pygame.quit()
 
 
 #constants
@@ -734,8 +741,8 @@ for y in xrange(0, slotwidth*10, slotwidth):
     for x in xrange(0, slotwidth*10, slotwidth):
         pygame.draw.rect(visualBoard, (30, 60, 200), pygame.Rect(x, y, slotwidth, slotwidth))
         pygame.draw.rect(visualBoard, (255, 255, 255), pygame.Rect(x, y, slotwidth, slotwidth), 1)
-EXPLOSION_IMAGES = (pygame.image.load("img/blowup1.png"), pygame.image.load("img/blowup2.png"), pygame.image.load("img/blowup3.png"), pygame.image.load("img/blowup4.png"), pygame.image.load("img/blowup5.png"), pygame.image.load("img/blowup6.png"))
-signs = (pygame.image.load("img/Hit.png"), pygame.image.load("img/Miss.png"))
+EXPLOSION_IMAGES = (pygame.image.load("media/blowup1.png"), pygame.image.load("media/blowup2.png"), pygame.image.load("media/blowup3.png"), pygame.image.load("media/blowup4.png"), pygame.image.load("media/blowup5.png"), pygame.image.load("media/blowup6.png"))
+signs = (pygame.image.load("media/Hit.png"), pygame.image.load("media/Miss.png"))
 #
 try:
     client_socket = [None]

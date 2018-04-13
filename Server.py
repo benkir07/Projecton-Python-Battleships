@@ -420,6 +420,9 @@ def maintain_gui(gui):
                 except:
                     pass
                 label("Players placing ships", 48, (220, 45))
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    gui.gamesListbox.selection_clear(0, Tkinter.END)
             pygame.display.update()
         except:
             pygame.quit()
@@ -435,8 +438,8 @@ server_socket.listen(5)
 gui = ServerGUI()
 
 slotwidth = 36
-background = pygame.image.load("img/Turn.png")
-signs = (pygame.image.load("img/Hit.png"), pygame.image.load("img/Miss.png"))
+background = pygame.image.load("media/Turn.png")
+signs = (pygame.image.load("media/Hit.png"), pygame.image.load("media/Miss.png"))
 
 visualBoard = pygame.Surface((slotwidth*10, slotwidth*10))
 for y in xrange(0, slotwidth*10, slotwidth):
