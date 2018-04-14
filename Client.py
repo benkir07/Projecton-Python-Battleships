@@ -8,6 +8,9 @@ import pickle
 import select
 import pygame
 import pygame.gfxdraw
+import thread
+from ctypes import POINTER, WINFUNCTYPE, windll
+from ctypes.wintypes import BOOL, HWND, RECT
 
 
 class Button(object):
@@ -83,6 +86,7 @@ class ConnectionMenu(Tkinter.Tk):
         Tkinter.Tk.__init__(self)
         self.title("Connection Menu")
         self.geometry("200x200")
+        self.resizable(0, 0)
         self.protocol("WM_DELETE_WINDOW", lambda: self.withdraw())
         self.name = Tkinter.StringVar()
         self.ip = Tkinter.StringVar()
@@ -122,25 +126,25 @@ class ConnectionMenu(Tkinter.Tk):
 
 
 class LobbyApp(Tkinter.Tk):
-    height = 500
+    height = 540
     width = 800
 
     def __init__(self, client_socket):
         Tkinter.Tk.__init__(self)
-        self.geometry(str(self.width) + "x" + str(self.height))
         self.resizable(0, 0)
-        self.title("Lobby")
-        self.protocol("WM_DELETE_WINDOW", lambda: self.withdraw())
         self.client_socket = client_socket
         self.lobbies = Lobby(self, self.height, self.width-200, self.client_socket)
-        self.lobbies.pack(side=Tkinter.LEFT)
         self.chat = Chat(self, self.height, 200)
+        self.lobbies.pack(side=Tkinter.LEFT)
         self.chat.pack(side=Tkinter.RIGHT)
         self.room = ""
 
     def mainloop(self):
         self.up = True
         self.deiconify()
+        self.title("Lobby")
+        self.geometry(str(self.width) + "x" + str(self.height))
+        self.protocol("WM_DELETE_WINDOW", lambda: self.withdraw())
         self.lobbies.set_lobby()
         while self.up and self.state() != "withdrawn":
             self.update()
@@ -438,6 +442,7 @@ def mini_game(client_socket):
     score = 0
 
     while True:
+        game_chat()
         screen.blit(background, (0, 0))
         label("Score: " + str(score), 20, (120, 150), (0, 0, 0))
         label("Waiting for other player", 48, (240, 50))
@@ -461,12 +466,66 @@ def mini_game(client_socket):
                 return
 
 
+def create_board_helper(finish, ships, board):
+    global focused, exit
+    while not finish[0]:
+        try:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    exit = True
+                if event.type == pygame.MOUSEBUTTONUP:
+                    if focused == None:
+                        for ship in ships:
+                            if ship.highlighted:
+                                ship.flip()
+                                focused = ship
+                                break
+                    if focused != None:
+                        focused.remove(board)
+                        if focused.rect[0] + slotwidth / 4 < 430 or focused.rect[1] + slotwidth / 4 < 140 or focused.rect[
+                            0] + focused.rect[2] - slotwidth / 4 > 430 + slotwidth * 10 or focused.rect[1] + focused.rect[
+                            3] - slotwidth / 4 > 140 + slotwidth * 10:
+                            focused.default(board)
+                        else:
+                            focused.place = (int(round((focused.rect[0] - 430.0)) / slotwidth),
+                                             int(round((focused.rect[1] - 140.0) / slotwidth)))
+                            legal = True
+                            for x in xrange(focused.width):
+                                if focused.horizontal:
+                                    if board[focused.place[1]][focused.place[0] + x] != "":
+                                        legal = False
+                                elif board[focused.place[1] + x][focused.place[0]] != "":
+                                    legal = False
+                            if legal:
+                                for x in xrange(focused.width):
+                                    if focused.horizontal:
+                                        board[focused.place[1]][focused.place[0] + x] = focused.ID
+                                    else:
+                                        board[focused.place[1] + x][focused.place[0]] = focused.ID
+                                focused.rect[0] = focused.place[0] * slotwidth + 432
+                                focused.rect[1] = focused.place[1] * slotwidth + 142
+                            else:
+                                focused.default(board)
+                    focused = None
+                if event.type == pygame.MOUSEMOTION and pygame.mouse.get_pressed()[0]:
+                    if focused == None:
+                        for ship in ships:
+                            if ship.pressed():
+                                focused = ship
+                    else:
+                        focused.rect[0] += event.rel[0]
+                        focused.rect[1] += event.rel[1]
+        except:
+            pass
+
+
 def create_board(client_socket):
     pygame.display.set_caption("Create Your Board")
     background = pygame.image.load("media/Create.png")
     submit = Button(screen, (30, 60, 200), 80, 444, 160, 75,  "Submit", (255, 255, 255), (30, 60, 100))
     ships = [Battleship(0, screen, 125, 140, 2), Battleship(1, screen, 125-slotwidth/2, 190, 3), Battleship(2, screen, 125-slotwidth/2, 240, 3), Battleship(3, screen, 125-slotwidth, 290, 4), Battleship(4, screen, 125-slotwidth*1.5, 340, 5)]
     #ships = [ships[0]] #line for testing
+    global focused
     focused = None
     board = []
     for x in xrange(10):
@@ -474,11 +533,16 @@ def create_board(client_socket):
         for y in xrange(10):
             board[-1].append("")
 
-    finish = False
-    while not finish:
+    finish = [False]
+    global exit
+    exit = False
+    thread.start_new_thread(create_board_helper, (finish, ships, board))
+    while not finish[0]:
+        game_chat()
         rlist, wlist, xlist = select.select([client_socket], [], [], 0)
         for sock in rlist:
             if sock.recv(1024) == "disconnect;":
+                finish[0] = True
                 raise Exception
         screen.blit(background, (0, 0))
         label("Place your battleships", 48, (240, 55))
@@ -486,59 +550,15 @@ def create_board(client_socket):
         screen.blit(visualBoard, (430, 140))
         map(Battleship.draw, ships)
         if focused != None:
-            focused.draw()
             pygame.draw.rect(screen, (255, 0, 0), focused.rect, 1)
         pygame.display.update()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                raise Exception("Close")
-            if event.type == pygame.MOUSEBUTTONUP:
-                if focused == None:
-                    for ship in ships:
-                        if ship.highlighted:
-                            ship.flip()
-                            focused = ship
-                            break
-                if focused != None:
-                    focused.remove(board)
-                    if focused.rect[0] + slotwidth / 4 < 430 or focused.rect[1] + slotwidth / 4 < 140 or focused.rect[
-                        0] + focused.rect[2] - slotwidth / 4 > 430 + slotwidth * 10 or focused.rect[1] + focused.rect[
-                        3] - slotwidth / 4 > 140 + slotwidth * 10:
-                        focused.default(board)
-                    else:
-                        focused.place = (int(round((focused.rect[0] - 430.0)) / slotwidth),
-                                         int(round((focused.rect[1] - 140.0) / slotwidth)))
-                        legal = True
-                        for x in xrange(focused.width):
-                            if focused.horizontal:
-                                if board[focused.place[1]][focused.place[0] + x] != "":
-                                    legal = False
-                            elif board[focused.place[1] + x][focused.place[0]] != "":
-                                legal = False
-                        if legal:
-                            for x in xrange(focused.width):
-                                if focused.horizontal:
-                                    board[focused.place[1]][focused.place[0] + x] = focused.ID
-                                else:
-                                    board[focused.place[1] + x][focused.place[0]] = focused.ID
-                            focused.rect[0] = focused.place[0] * slotwidth + 432
-                            focused.rect[1] = focused.place[1] * slotwidth + 142
-                        else:
-                            focused.default(board)
-                focused = None
-            if event.type == pygame.MOUSEMOTION and pygame.mouse.get_pressed()[0]:
-                if focused == None:
-                    for ship in ships:
-                        if ship.pressed():
-                            focused = ship
-                else:
-                    focused.rect[0] += event.rel[0]
-                    focused.rect[1] += event.rel[1]
         if submit.pressed():
-            finish = True
+            finish[0] = True
             for ship in ships:
                 if ship.place == None:
-                    finish = False
+                    finish[0] = False
+        if exit:
+            raise Exception("Close")
     return board, ships
 
 
@@ -590,6 +610,7 @@ def shoot(ships, board, guesses, client_socket, opName):
     pygame.display.update()
 
     while True:
+        game_chat()
         rlist, wlist, xlist = select.select([client_socket], [], [], 0)
         for sock in rlist:
             if sock.recv(1024) == "disconnect;":
@@ -619,6 +640,7 @@ def watch(ships, board, guesses, client_socket, opName, state="w"):
     pygame.display.update()
 
     while True:
+        game_chat()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 raise Exception("Close")
@@ -656,7 +678,22 @@ def show_state(state):
         pygame.mixer.music.play(1, 0.0)
 
 
+def game_chat():
+    rect = GetWindowRect(pygame.display.get_wm_info()["window"])
+    lobby_gui.geometry("200x540+" + str(rect.right) + "+" + str(rect.top))
+    lobby_gui.update()
+    lobby_gui.chat.update()
+
+
 def game(client_socket):
+    lobby_gui.title("Chat")
+    lobby_gui.lobbies.pack_forget()
+    lobby_gui.chat.pack_forget()
+    lobby_gui.attributes('-disabled', True)
+    lobby_gui.geometry("200x540")
+    lobby_gui.chat.pack()
+    lobby_gui.deiconify()
+
     global screen
     pygame.init()
     screen = pygame.display.set_mode((960, 540))
@@ -709,6 +746,7 @@ def game(client_socket):
                 show_state(state)
                 con = Button(screen, (30, 60, 200), 750, 40, 160, 60, "Back to main menu", (255, 255, 255), (30, 60, 100), 20)
                 while not finish:
+                    game_chat()
                     con.draw()
                     pygame.display.update()
                     for event in pygame.event.get():
@@ -724,6 +762,7 @@ def game(client_socket):
                 client_socket.sendall("ready")
                 watch(ships, board, guesses, client_socket, opName, state)
         pygame.quit()
+        lobby_gui.withdraw()
     except Exception as ex:
         print repr(ex)
         if ex.message == ("Close"):
@@ -731,7 +770,13 @@ def game(client_socket):
             quit()
         client_socket.sendall("no!")
         pygame.quit()
+        lobby_gui.withdraw()
         tkMessageBox.showerror("Disconnected", "Your opponent has disconnected")
+
+    lobby_gui.chat.pack_forget()
+    lobby_gui.lobbies.pack(side=Tkinter.LEFT)
+    lobby_gui.chat.pack(side=Tkinter.RIGHT)
+    lobby_gui.attributes('-disabled', False)
 
 
 #constants
@@ -743,6 +788,7 @@ for y in xrange(0, slotwidth*10, slotwidth):
         pygame.draw.rect(visualBoard, (255, 255, 255), pygame.Rect(x, y, slotwidth, slotwidth), 1)
 EXPLOSION_IMAGES = (pygame.image.load("media/blowup1.png"), pygame.image.load("media/blowup2.png"), pygame.image.load("media/blowup3.png"), pygame.image.load("media/blowup4.png"), pygame.image.load("media/blowup5.png"), pygame.image.load("media/blowup6.png"))
 signs = (pygame.image.load("media/Hit.png"), pygame.image.load("media/Miss.png"))
+GetWindowRect = WINFUNCTYPE(BOOL, HWND, POINTER(RECT))(("GetWindowRect", windll.user32), ((1, "hwnd"), (2, "lprect")))
 #
 try:
     client_socket = [None]
