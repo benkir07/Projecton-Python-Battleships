@@ -689,7 +689,7 @@ def game(client_socket):
     lobby_gui.title("Chat")
     lobby_gui.lobbies.pack_forget()
     lobby_gui.chat.pack_forget()
-    lobby_gui.attributes('-disabled', True)
+    lobby_gui.overrideredirect(1)
     lobby_gui.geometry("200x540")
     lobby_gui.chat.pack()
     lobby_gui.deiconify()
@@ -776,7 +776,7 @@ def game(client_socket):
     lobby_gui.chat.pack_forget()
     lobby_gui.lobbies.pack(side=Tkinter.LEFT)
     lobby_gui.chat.pack(side=Tkinter.RIGHT)
-    lobby_gui.attributes('-disabled', False)
+    lobby_gui.overrideredirect(0)
 
 
 #constants
