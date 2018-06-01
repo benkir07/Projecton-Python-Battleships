@@ -1,16 +1,25 @@
 # -*- coding: utf-8 -*-
 
+import os
 import tkMessageBox
 import Tkinter
 import socket
 from random import randint
 import pickle
 import select
-import pygame
-import pygame.gfxdraw
 import thread
 from ctypes import POINTER, WINFUNCTYPE, windll
 from ctypes.wintypes import BOOL, HWND, RECT
+import urllib
+import zipfile
+os.system("pip install pygame")
+os.system("pip install psutil")
+os.system("pip install ipcalc")
+os.system("pip install six")
+import pygame
+import pygame.gfxdraw
+import psutil
+import ipcalc
 
 
 class Button(object):
@@ -778,6 +787,12 @@ def game(client_socket):
     lobby_gui.chat.pack(side=Tkinter.RIGHT)
     lobby_gui.overrideredirect(0)
 
+if not os.path.exists("media"):
+    urllib.urlretrieve("https://drive.google.com/uc?authuser=0&id=1u4Ji-unFkUNDYHJV98pIVaP8en6p8ce-&export=download", "media.zip")
+    file = zipfile.ZipFile("media.zip")
+    file.extractall()
+    file.close()
+    os.remove("media.zip")
 
 #constants
 slotwidth = 36
@@ -795,12 +810,22 @@ try:
     connected = [False]
     connection_menu = ConnectionMenu()
 
+
     tempSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, True)
     tempSock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
     tempSock.settimeout(1)
-    tempSock.sendto("battleships?", ("255.255.255.255", 12346))
+    addrs = psutil.net_if_addrs()
+    keys = []
+    for addr in addrs:
+        if "Pseudo" in addr or "Virtual" in addr:
+            keys.append(addr)
+    for key in keys:
+        del addrs[key]
+    addr = addrs[addrs.keys()[0]][1]
+    tempSock.sendto("battleships?", (str(ipcalc.Network(addr.address, addr.netmask).broadcast()), 12346))
     tempSock.sendto("battleships?", ("37.142.182.218", 12346))
+    tempSock.sendto("battleships?", ("rabinonline.ddns.net", 12346))
     try:
         data = tempSock.recvfrom(1024)
         if data[0] == "indeed":

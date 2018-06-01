@@ -1,9 +1,15 @@
+# -*- coding: utf-8 -*-
+
+import os
 import socket
 import pickle
 import thread
 import select
 import Tkinter
 from random import randint
+import urllib
+import zipfile
+os.system("pip install pygame")
 import pygame
 
 
@@ -430,6 +436,13 @@ def maintain_gui(gui):
         pygame.quit()
     gui.update()
 
+
+if not os.path.exists("media"):
+    urllib.urlretrieve("https://drive.google.com/uc?authuser=0&id=1u4Ji-unFkUNDYHJV98pIVaP8en6p8ce-&export=download", "media.zip")
+    file = zipfile.ZipFile("media.zip")
+    file.extractall()
+    file.close()
+    os.remove("media.zip")
 
 server_socket = socket.socket()
 server_socket.bind(('0.0.0.0', 12345))
