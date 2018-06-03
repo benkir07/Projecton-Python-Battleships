@@ -818,7 +818,7 @@ try:
     addrs = psutil.net_if_addrs()
     keys = []
     for addr in addrs:
-        if "Pseudo" in addr or "Virtual" in addr:
+        if "Pseudo" in addr or "Virtual" in addr or "169.254" in addrs[addr][1].address:
             keys.append(addr)
     for key in keys:
         del addrs[key]
